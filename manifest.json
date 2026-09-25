@@ -37,7 +37,7 @@
       {
         "key": "showIcons",
         "type": "boolean",
-        "label": "Show app icons",
+        "label": "App icons",
         "defaultValue": true
       },
       {
@@ -78,9 +78,9 @@
       {
         "key": "showNumbers",
         "type": "boolean",
-        "label": "Show numbers",
+        "label": "Workspace numbers",
         "defaultValue": true,
-        "description": "Off hides the number on workspaces that have icons."
+        "description": "Hides the number on workspaces that have icons."
       },
       {
         "key": "iconPosition",

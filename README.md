@@ -8,7 +8,7 @@ on 1 and 6.
 It follows your Omarchy theme, and everything is set from a small settings
 popup. There's nothing to edit by hand.
 
-![Workspace Icons in five Omarchy themes, with the settings popup](preview.png)
+![Workspace Icons in six Omarchy themes, with the settings popup](preview.png)
 
 ## What it can do
 
@@ -132,7 +132,7 @@ widget's entry in `~/.config/omarchy/shell.json`:
 |---|---|---|
 | `maxIcons` | `4` | Maximum icons per workspace (one per distinct app). |
 | `showTerminalPrograms` | `true` | Show the program running in a terminal instead of the terminal icon. |
-| `terminalPollSeconds` | `2` | How often to check what runs in terminals. |
+| `terminalPollSeconds` | `2` | How often to refresh window info and check what runs in terminals. |
 | `iconOverrides` | `{}` | Window class or program name → icon name or absolute image path. |
 
 Example:
@@ -142,7 +142,7 @@ Example:
   "id": "woodenplastic.workspace-icons",
   "maxIcons": 3,
   "iconOverrides": {
-    "xfreerdp": "windows",
+    "xfreerdp": "preferences-desktop-remote-desktop",
     "MyTauriApp": "/home/me/projects/my-app/src-tauri/icons/128x128.png"
   }
 }
@@ -196,12 +196,25 @@ No other packages are needed.
   disable or removal it puts that entry back. This is Omarchy's own
   replace-and-restore mechanism, declared with `"omarchy": {"clonedFrom":
   "omarchy.workspaces"}` in `manifest.json`.
-- It writes only to `~/.config/omarchy/shell.json`, and only when you change a
-  setting in the popup. It uses Omarchy's own config helper.
+- It writes only to `~/.config/omarchy/shell.json`, using Omarchy's own config
+  helper: when you change a setting, and on removal to drop its settings-button
+  entry.
 - **Show Omarchy logo** adds or removes the `omarchy.menu` entry on the bar.
 - **Plugin symbol** in a bar section adds a second entry for this widget
   (`{"id": "woodenplastic.workspace-icons", "mode": "symbol"}`) that draws
   only the settings button.
+
+## What it reads
+
+Everything stays on your computer; the plugin makes no network requests.
+
+- The window list from `hyprctl clients`, every couple of seconds.
+- For terminal windows, the name of the program in the foreground, from
+  `/proc`.
+- Desktop entries, your icon theme, `/usr/share/pixmaps`, and which package
+  owns a program and what icons it installed (`pacman -Qo` / `pacman -Ql`,
+  read-only).
+- `~/.config/omarchy/shell.json`, for its own settings.
 
 ## Uninstall
 
@@ -229,6 +242,8 @@ omarchy bar put omarchy.menu --section left --index 0
   icon. Omarchy's *Install Web App* creates one.
 - **Vertical bar:** icons show on horizontal bars only; vertical bars show
   numbers.
+- **A newly installed app still shows a generic icon:** icons found through
+  packages are looked up once per session; run `omarchy restart shell`.
 - **A change doesn't show up:** run `omarchy restart shell`.
 
 ## License

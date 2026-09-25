@@ -1,14 +1,14 @@
 #!/bin/bash
 
 # Edits this widget's entries in ~/.config/omarchy/shell.json. The widget can
-# be on the bar twice (the workspaces, and the grid symbol with mode "symbol"),
+# be on the bar twice (the workspaces, and the plugin symbol with mode "symbol"),
 # and the shell's own inline-settings update rewrites every entry with the
 # widget's id, so the settings popup writes through here instead.
 #
 #   config set <key> <json-value>      Set a setting on the workspaces entry
 #   config main <left|center|right>    Move the workspaces to a bar section
-#   config symbol <left|center|right>  Put the grid symbol in a bar section
-#   config symbol tray                 Show the grid symbol as a tray icon instead
+#   config symbol <left|center|right>  Put the plugin symbol in a bar section
+#   config symbol tray                 Show the plugin symbol as a tray icon instead
 
 set -euo pipefail
 

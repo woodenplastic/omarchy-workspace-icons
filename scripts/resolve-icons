@@ -8,6 +8,12 @@
 for name in "$@"; do
   path=""
 
+  # Plain names only: nothing that could be read as a path or an option.
+  if [[ ! $name =~ ^[A-Za-z0-9_][A-Za-z0-9._+-]*$ ]]; then
+    printf '%s\t\n' "$name"
+    continue
+  fi
+
   for ext in svg png; do
     if [[ -f /usr/share/pixmaps/$name.$ext ]]; then
       path="/usr/share/pixmaps/$name.$ext"

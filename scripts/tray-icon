@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 """Tray icon for Workspace Icons: a StatusNotifierItem whose click opens the
-widget's settings. Started and stopped by the widget while its grid symbol is
+widget's settings. Started and stopped by the widget while its plugin symbol is
 set to the tray. Uses the system Python's PyGObject, which Omarchy ships."""
 
 import os

@@ -271,7 +271,9 @@ Panel {
   // Icons come only from what is installed on this computer; the plugin ships
   // none. Lookup order for a window:
   //   1. iconOverrides (by window class)
-  //   2. terminals: the program in the terminal's foreground (see programIcon)
+  //   2. terminals: the program in the terminal's foreground, by its own
+  //      icon, a terminal launcher entry, its package, or a Nerd Font glyph
+  //      (see programIcon)
   //   3. web apps: the desktop entry that launches the window's site
   //   4. the app's desktop entry, then an icon theme icon named after the class
   //   5. /usr/share/pixmaps or the owning package's icons (scripts/resolve-icons)
@@ -300,10 +302,16 @@ Panel {
     }
   }
 
+  // An icon name or, for overrides and desktop entries, an absolute path.
   function themedIcon(name) {
     if (!name) return ""
     if (name.charAt(0) === "/") return "file://" + name
     return Quickshell.iconPath(name, true)
+  }
+
+  // An icon theme icon named after a window class or program; never a path.
+  function namedIcon(name) {
+    return name && name.indexOf("/") === -1 ? Quickshell.iconPath(name, true) : ""
   }
 
   function entryIcon(name) {
@@ -417,7 +425,7 @@ Panel {
     }
     for (i = 0; i < names.length; i++) {
       var launcher = root.launcherIndex.programs[names[i]]
-      var path = root.entryIcon(names[i]) || root.themedIcon(names[i])
+      var path = root.entryIcon(names[i]) || root.namedIcon(names[i])
         || (launcher ? root.themedIcon(launcher) : "") || root.resolvedIcon(names[i])
       if (path) return path
     }
@@ -439,8 +447,8 @@ Panel {
 
     var path = root.webappIcon(info)
       || root.entryIcon(info.appId)
-      || root.themedIcon(info.appId)
-      || root.themedIcon(info.appId.toLowerCase())
+      || root.namedIcon(info.appId)
+      || root.namedIcon(info.appId.toLowerCase())
       || root.entryIcon(info.initialClass)
       || root.entryIcon(info.initialTitle)
       || root.resolvedIcon(info.appId)
@@ -531,7 +539,7 @@ Panel {
     var names = []
     function want(name) {
       if (name && !(name in root.resolvedIcons) && names.indexOf(name) === -1
-          && !root.entryIcon(name) && !root.themedIcon(name) && !root.launcherIndex.programs[name])
+          && !root.entryIcon(name) && !root.namedIcon(name) && !root.launcherIndex.programs[name])
         names.push(name)
     }
     var values = Hyprland.toplevels.values
@@ -755,7 +763,6 @@ Panel {
     }
   }
 
-
   // ---- Settings popup.
 
   // Keyboard cursor over the popup rows: toggles first, then the choices.
@@ -764,13 +771,13 @@ Panel {
   readonly property color panelForeground: bar ? bar.foreground : Color.foreground
   readonly property string panelFont: bar ? bar.fontFamily : Style.font.family
 
-  // Toggle rows that carry `options` are choices shown in the toggle list.
   function setIconOpacity(value) {
     root.iconOpacityPreview = -1
     root.setSetting("iconOpacity", Math.round(Math.max(0.2, Math.min(1, value)) * 100) / 100)
   }
 
-  // Rows that change with left/right: choices and sliders.
+  // Rows that change with left/right: choices (including toggle-list rows
+  // that carry `options`) and sliders.
   function rowChoice(row) {
     if (row < root.toggles.length) return root.toggles[row].options || root.toggles[row].slider ? root.toggles[row] : null
     return root.choices[row - root.toggles.length] || null
