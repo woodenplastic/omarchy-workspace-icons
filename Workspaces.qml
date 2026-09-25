@@ -130,7 +130,7 @@ Panel {
   readonly property var toggles: [
     { key: "showIcons", label: "Show app icons", description: "An icon for each app open on a workspace." },
     { key: "smallIcons", label: "Small icons", description: "Smaller icons, closer to the text size." },
-    { key: "coloredIcons", label: "Colored icons", description: "Off shows the icons in greyscale." },
+    { key: "coloredIcons", label: "Colored icons", description: "Off tints the icons in the theme's accent color." },
     { key: "showNumbers", label: "Show numbers", description: "Off hides the number on workspaces that have icons." },
     { key: "omarchyLogo", label: "Show Omarchy logo", description: "The Omarchy menu button on the bar. The menu hotkey keeps working." }
   ]
@@ -482,8 +482,10 @@ Panel {
       source: modelData
       smooth: true
       layer.enabled: !root.coloredIcons
+      // Tinted with the theme's accent color, so they follow theme changes.
       layer.effect: MultiEffect {
-        saturation: -1
+        colorization: 1.0
+        colorizationColor: Color.accent
       }
     }
   }

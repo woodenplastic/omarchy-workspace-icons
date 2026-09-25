@@ -25,7 +25,7 @@ workspace) to open the settings:
 
 - **Show app icons**
 - **Small icons**
-- **Colored icons** (off shows greyscale icons)
+- **Colored icons** (off tints the icons in the theme's accent color)
 - **Show numbers** (off hides the number on workspaces that have icons)
 - **Show Omarchy logo** (hides the Omarchy menu button on the bar; the menu
   hotkey keeps working)
