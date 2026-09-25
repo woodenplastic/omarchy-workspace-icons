@@ -167,7 +167,7 @@ Panel {
     { key: "tintStyle", label: "Tint", parentKey: "coloredIcons", shownWhen: false,
       options: [{ value: "accent", label: "Accent" }, { value: "normal", label: "Normal" }] },
     { key: "colorFocused", label: "Color the focused workspace", description: "Show its icons in color instead of the focus mark.", parentKey: "coloredIcons", shownWhen: false },
-    { key: "showNumbers", label: "Workspace numbers", description: "Off hides the number on workspaces that have icons." },
+    { key: "showNumbers", label: "Workspace numbers", description: "Hides the number on workspaces that have icons." },
     { key: "omarchyLogo", label: "Show Omarchy logo", description: "The Omarchy menu button on the bar. The menu hotkey keeps working." }
   ]
 
