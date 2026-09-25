@@ -24,7 +24,6 @@ Click the grid symbol in front of the workspaces (or right click any
 workspace) to open the settings:
 
 - **Show app icons**
-- **Small icons**
 - **Colored icons** (off tints the icons in the theme's accent color)
   - **Color the focused workspace** (shown while colored icons are off: the
     focused workspace shows its icons in color instead of the focus mark)

@@ -30,7 +30,6 @@ Panel {
   }
 
   readonly property bool showIcons: option("showIcons", true) !== false
-  readonly property bool smallIcons: option("smallIcons", false) === true
   readonly property bool coloredIcons: option("coloredIcons", true) !== false
   // With tinted icons, mark the focused workspace by showing its icons in
   // full color instead of the focus mark.
@@ -44,7 +43,7 @@ Panel {
   // absolute image path, for apps without an icon of their own.
   readonly property var iconOverrides: option("iconOverrides", ({}))
 
-  readonly property real iconSize: Math.round(Style.font.body * (smallIcons ? 0.9 : 1.15))
+  readonly property real iconSize: Math.round(Style.font.body * 1.15)
 
   readonly property string configScript: Qt.resolvedUrl("scripts/config").toString().replace(/^file:\/\//, "")
 
@@ -132,7 +131,6 @@ Panel {
 
   readonly property var toggles: [
     { key: "showIcons", label: "app icons", description: "An icon for each app open on a workspace." },
-    { key: "smallIcons", label: "Small icons", description: "Smaller icons, closer to the text size." },
     { key: "coloredIcons", label: "Colored icons", description: "Off tints the icons in the theme's accent color." },
     // Sub-option of Colored icons, shown only while that is off.
     { key: "colorFocused", label: "Color the focused workspace", description: "Show its icons in color instead of the focus mark.", parentKey: "coloredIcons", shownWhen: false },
@@ -158,7 +156,6 @@ Panel {
 
   function toggleValue(key) {
     if (key === "showIcons") return root.showIcons
-    if (key === "smallIcons") return root.smallIcons
     if (key === "coloredIcons") return root.coloredIcons
     if (key === "colorFocused") return root.colorFocused
     if (key === "showNumbers") return root.showNumbers
