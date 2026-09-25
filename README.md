@@ -37,7 +37,8 @@ popup. There's nothing to edit by hand.
 - **Hide the Omarchy logo** on the bar if you don't use it. The Omarchy menu
   and its hotkey keep working.
 - **Settings in one popup.** Click the settings button, right-click any
-  workspace, or bind a hotkey. The popup also works with the keyboard.
+  workspace, or bind a hotkey. The popup also works with the keyboard, and in
+  tray mode the same settings are in the tray icon's menu.
 
 ## Screenshots
 
@@ -99,13 +100,17 @@ workspaces, or by right-clicking any workspace.
 Keyboard: arrow keys or `j`/`k` move between rows, `h`/`l` change a choice,
 Enter toggles, Esc closes.
 
-### Settings button in the tray
+### Settings in the tray
 
-With **Plugin symbol → Tray**, the settings button becomes a system tray icon.
-It hides in the tray drawer behind the arrow like other tray icons, and
-clicking it opens the settings right under it. A small helper
-(`scripts/tray-icon`) provides the tray icon. It runs only while Tray is
-selected and stops with the shell.
+With **Plugin symbol → Tray**, the settings button becomes a regular system
+tray icon. It hides in the tray drawer behind the arrow like other tray icons,
+and clicking it opens a standard tray menu with the same settings:
+checkmarks for the switches, and sub-menus for Tint, Bar section, Icon
+position and Plugin symbol. Omarchy's tray draws and places the menu, just like
+for any other tray app.
+
+A small helper (`scripts/tray-icon`) provides the tray icon and its menu. It
+runs only while Tray is selected and stops with the shell.
 
 ### Hotkey
 
