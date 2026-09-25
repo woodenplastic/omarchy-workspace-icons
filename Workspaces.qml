@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Hyprland
+import Quickshell.Io
 import qs.Commons
 import qs.Ui
 
@@ -43,10 +44,94 @@ BarWidget {
   // apps without a desktop entry. Set inline in shell.json (see README).
   readonly property var iconOverrides: setting("iconOverrides", ({}))
 
+  readonly property bool showTerminalPrograms: setting("showTerminalPrograms", true) !== false
+  readonly property var shells: ["bash", "zsh", "fish", "sh", "dash", "nu", "xonsh", "elvish", "ksh", "tcsh"]
+  // Terminal window pid -> name of the program in the terminal's foreground.
+  property var terminalPrograms: ({})
+
   function windowInfo(toplevel) {
     var ipc = toplevel.lastIpcObject || {}
     var appId = toplevel.wayland && toplevel.wayland.appId ? toplevel.wayland.appId : String(ipc.class || "")
-    return { appId: appId, initialClass: String(ipc.initialClass || ""), initialTitle: String(ipc.initialTitle || "") }
+    return {
+      appId: appId,
+      initialClass: String(ipc.initialClass || ""),
+      initialTitle: String(ipc.initialTitle || ""),
+      pid: Number(ipc.pid || 0)
+    }
+  }
+
+  function isTerminalEntry(name) {
+    if (!name) return false
+    var entry = DesktopEntries.heuristicLookup(name)
+    return !!entry && !!entry.categories && entry.categories.indexOf("TerminalEmulator") !== -1
+  }
+
+  // Terminals launched with a custom app id (e.g. `foot --app-id=x`) still
+  // carry the terminal's name as their initial title.
+  function isTerminal(info) {
+    return root.isTerminalEntry(info.appId) || root.isTerminalEntry(info.initialClass) || root.isTerminalEntry(info.initialTitle)
+  }
+
+  function programIcon(name) {
+    if (!name || root.shells.indexOf(name) !== -1) return ""
+    var override = root.iconOverrides[name]
+    if (override) return root.themedIcon(String(override))
+    return root.entryIcon(name) || root.themedIcon(name)
+  }
+
+  function terminalPids() {
+    var pids = []
+    var values = Hyprland.toplevels.values
+    for (var i = 0; i < values.length; i++) {
+      var info = root.windowInfo(values[i])
+      if (info.pid > 0 && root.isTerminal(info)) pids.push(String(info.pid))
+    }
+    return pids
+  }
+
+  function refreshTerminalPrograms() {
+    if (!root.showIcons || !root.showTerminalPrograms || programProbe.running) return
+    var pids = root.terminalPids()
+    if (pids.length === 0) {
+      root.terminalPrograms = ({})
+      return
+    }
+    programProbe.command = ["bash", "-c", root.probeScript, "probe"].concat(pids)
+    programProbe.running = true
+  }
+
+  // For each terminal pid, print the foreground program on the terminal's tty.
+  readonly property string probeScript: 'for pid in "$@"; do\n'
+    + '  name=""\n'
+    + '  child=$(cat /proc/"$pid"/task/*/children 2>/dev/null | tr " " "\\n" | grep -m1 .)\n'
+    + '  if [ -n "$child" ] && stat=$(cat /proc/"$child"/stat 2>/dev/null); then\n'
+    + '    set -- ${stat##*) }\n'
+    + '    [ "${6:-0}" -gt 0 ] && name=$(cat /proc/"$6"/comm 2>/dev/null)\n'
+    + '  fi\n'
+    + '  echo "$pid $name"\n'
+    + 'done\n'
+
+  Process {
+    id: programProbe
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var next = ({})
+        var lines = this.text.split("\n")
+        for (var i = 0; i < lines.length; i++) {
+          var parts = lines[i].trim().split(" ")
+          if (parts[0]) next[parts[0]] = parts.slice(1).join(" ")
+        }
+        if (JSON.stringify(next) !== JSON.stringify(root.terminalPrograms)) root.terminalPrograms = next
+      }
+    }
+  }
+
+  Timer {
+    interval: Math.max(1, Number(root.setting("terminalPollSeconds", 2))) * 1000
+    running: root.showIcons && root.showTerminalPrograms
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: root.refreshTerminalPrograms()
   }
 
   function themedIcon(name) {
@@ -65,6 +150,11 @@ BarWidget {
     var override = root.iconOverrides[info.appId]
     if (override) return root.themedIcon(String(override))
 
+    if (root.showTerminalPrograms && root.isTerminal(info)) {
+      var program = root.programIcon(root.terminalPrograms[String(info.pid)])
+      if (program) return program
+    }
+
     var path = root.entryIcon(info.appId)
       || root.themedIcon(info.appId)
       || root.themedIcon(info.appId.toLowerCase())
@@ -75,7 +165,7 @@ BarWidget {
     return path || Quickshell.iconPath("application-x-executable", true)
   }
 
-  // One icon per distinct app on the workspace, in window order.
+  // One icon per distinct app (or terminal program) on the workspace, in window order.
   function workspaceIcons(workspace) {
     if (workspace === null || !root.showIcons) return []
     var seen = []
@@ -83,9 +173,11 @@ BarWidget {
     var toplevels = workspace.toplevels.values
     for (var i = 0; i < toplevels.length && icons.length < root.maxIcons; i++) {
       var info = root.windowInfo(toplevels[i])
-      if (info.appId === "" || seen.indexOf(info.appId) !== -1) continue
-      seen.push(info.appId)
-      icons.push(root.iconFor(info))
+      if (info.appId === "") continue
+      var icon = root.iconFor(info)
+      if (seen.indexOf(icon) !== -1) continue
+      seen.push(icon)
+      icons.push(icon)
     }
     return icons
   }

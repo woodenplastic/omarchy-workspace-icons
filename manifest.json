@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "woodenplastic.workspace-icons",
   "name": "Workspace Icons",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "Adrian Wild",
   "license": "MIT",
-  "description": "Workspace number indicators that also show an icon for each app open on the workspace.",
+  "description": "Workspace number indicators that also show an icon for each app open on the workspace, including the program running inside terminals.",
   "kinds": [
     "bar-widget"
   ],
@@ -24,7 +24,8 @@
     "defaultSection": "left",
     "defaults": {
       "showIcons": true,
-      "maxIcons": 4
+      "maxIcons": 4,
+      "showTerminalPrograms": true
     },
     "schema": [
       {
@@ -42,6 +43,13 @@
         "step": 1,
         "defaultValue": 4,
         "description": "One icon per distinct app, in window order."
+      },
+      {
+        "key": "showTerminalPrograms",
+        "type": "boolean",
+        "label": "Show programs in terminals",
+        "defaultValue": true,
+        "description": "Show the icon of the program running in a terminal (e.g. nvim, btop) instead of the terminal icon."
       }
     ]
   }
