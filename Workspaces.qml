@@ -9,12 +9,12 @@ import qs.Ui
 
 // Workspace indicators with the icons of the apps on each workspace.
 //
-// The grid symbol at the start opens the settings popup; right click on a
+// The plugin symbol at the start opens the settings popup; right click on a
 // workspace opens it too. Hotkey: `omarchy-shell woodenplastic.workspace-icons toggle`.
 Panel {
   id: root
   moduleName: "woodenplastic.workspace-icons"
-  // The grid symbol can sit in its own bar section as a second entry of this
+  // The plugin symbol can sit in its own bar section as a second entry of this
   // widget with `"mode": "symbol"`; that entry draws only the symbol.
   readonly property bool symbolMode: settings && settings.mode === "symbol"
   ipcTarget: symbolMode ? "" : "woodenplastic.workspace-icons"
@@ -36,10 +36,10 @@ Panel {
   // With tinted icons, mark the focused workspace by showing its icons in
   // full color instead of the focus mark.
   readonly property bool colorFocused: option("colorFocused", false) === true
-  // How icons look with colored icons off: tinted in the theme's accent color
-  // ("theme", which also colors the numbers) or "greyscale".
-  readonly property string tintStyle: option("tintStyle", "theme") === "greyscale" ? "greyscale" : "theme"
-  readonly property bool themeTint: !coloredIcons && tintStyle === "theme"
+  // Color that icons (and numbers) take with colored icons off: the theme's
+  // "accent" color or its "normal" text color. Older values map across.
+  readonly property string tintStyle: ["normal", "greyscale"].indexOf(String(option("tintStyle", "accent"))) !== -1 ? "normal" : "accent"
+  readonly property color tintColor: tintStyle === "accent" ? Color.accent : symbolColor
   readonly property bool showNumbers: option("showNumbers", true) !== false
   readonly property bool showTerminalPrograms: option("showTerminalPrograms", true) !== false
   readonly property int maxIcons: Math.max(1, Number(option("maxIcons", 4)))
@@ -48,7 +48,7 @@ Panel {
   // Map a window class or terminal program name to a theme icon name or an
   // absolute image path, for apps without an icon of their own.
   readonly property var iconOverrides: option("iconOverrides", ({}))
-  // The grid symbol shown as a system tray icon (scripts/tray-icon) instead of on the bar.
+  // The plugin symbol shown as a system tray icon (scripts/tray-icon) instead of on the bar.
   readonly property bool symbolInTray: option("symbolInTray", false) === true
 
   readonly property real iconSize: Math.round(Style.font.body * 1.15)
@@ -142,7 +142,7 @@ Panel {
     { key: "coloredIcons", label: "Colored icons", description: "Off tints the icons, see Tint below." },
     // Sub-option of Colored icons, shown only while that is off.
     { key: "tintStyle", label: "Tint", parentKey: "coloredIcons", shownWhen: false,
-      options: [{ value: "theme", label: "Theme" }, { value: "greyscale", label: "Greyscale" }] },
+      options: [{ value: "accent", label: "Accent" }, { value: "normal", label: "Normal" }] },
     { key: "colorFocused", label: "Color the focused workspace", description: "Show its icons in color instead of the focus mark.", parentKey: "coloredIcons", shownWhen: false },
     { key: "showNumbers", label: "Workspace numbers", description: "Off hides the number on workspaces that have icons." },
     { key: "omarchyLogo", label: "Show Omarchy logo", description: "The Omarchy menu button on the bar. The menu hotkey keeps working." }
@@ -157,7 +157,7 @@ Panel {
   readonly property var choices: [
     { key: "widgetSection", label: "Bar section", options: sectionOptions },
     { key: "iconPosition", label: "Icon position", options: [{ value: "left", label: "Left" }, { value: "right", label: "Right" }] },
-    { key: "symbolPosition", label: "Grid symbol", options: sectionOptions.concat([{ value: "tray", label: "Tray" }]) }
+    { key: "symbolPosition", label: "Plugin symbol", options: sectionOptions.concat([{ value: "tray", label: "Tray" }]) }
   ]
 
   function choiceValues(choice) {
@@ -493,7 +493,7 @@ Panel {
             anchors.verticalCenter: parent.verticalCenter
             textFormat: Text.PlainText
             text: button.label
-            color: root.themeTint ? Color.accent : button.foreground
+            color: root.coloredIcons ? button.foreground : root.tintColor
             font.family: button.fontFamily
             font.pixelSize: button.fontSize
             renderType: Text.NativeRendering
@@ -522,11 +522,10 @@ Panel {
       source: modelData.source
       smooth: true
       layer.enabled: !modelData.colored
-      // Tinted with the theme's accent color (so they follow theme changes) or greyscale.
+      // Tinted with a theme color, so they follow theme changes.
       layer.effect: MultiEffect {
-        saturation: root.tintStyle === "greyscale" ? -1 : 0
-        colorization: root.tintStyle === "theme" ? 1.0 : 0
-        colorizationColor: Color.accent
+        colorization: 1.0
+        colorizationColor: root.tintColor
       }
     }
   }
