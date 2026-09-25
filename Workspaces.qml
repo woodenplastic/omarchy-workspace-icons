@@ -24,11 +24,20 @@ Panel {
   readonly property bool showNumbers: setting("showNumbers", true) !== false
   readonly property bool showTerminalPrograms: setting("showTerminalPrograms", true) !== false
   readonly property int maxIcons: Math.max(1, Number(setting("maxIcons", 4)))
+  // Where the app icons sit around the workspace number, and where the grid
+  // symbol sits among the workspaces: "left", "center" or "right".
+  readonly property string iconPosition: root.positionSetting("iconPosition", "right")
+  readonly property string symbolPosition: root.positionSetting("symbolPosition", "left")
   // Map a window class or terminal program name to a theme icon name or an
   // absolute image path, for apps without an icon of their own.
   readonly property var iconOverrides: setting("iconOverrides", ({}))
 
   readonly property real iconSize: Math.round(Style.font.body * (smallIcons ? 0.9 : 1.15))
+
+  function positionSetting(key, fallback) {
+    var value = String(setting(key, fallback))
+    return ["left", "center", "right"].indexOf(value) !== -1 ? value : fallback
+  }
 
   function setSetting(key, value) {
     var entry = { id: root.moduleName }
@@ -41,24 +50,103 @@ Panel {
       root.bar.shell.updateEntryInline(root.moduleName, entry)
   }
 
-  readonly property var options: [
+  // ---- Bar layout state owned by other entries (the Omarchy logo and this
+  //      widget's own section), read back from shell.json.
+
+  property bool omarchyLogoShown: true
+  property string widgetSection: "left"
+
+  function readShellConfig(text) {
+    var config
+    try { config = JSON.parse(text) } catch (e) { return }
+    var layout = config && config.bar && config.bar.layout ? config.bar.layout : {}
+    var logo = false
+    var sections = ["left", "center", "right"]
+    for (var s = 0; s < sections.length; s++) {
+      var entries = layout[sections[s]] || []
+      for (var i = 0; i < entries.length; i++) {
+        var id = entries[i] && entries[i].id
+        if (id === "omarchy.menu") logo = true
+        if (id === root.moduleName) root.widgetSection = sections[s]
+      }
+    }
+    root.omarchyLogoShown = logo
+  }
+
+  FileView {
+    id: shellConfigFile
+    path: Quickshell.env("HOME") + "/.config/omarchy/shell.json"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: root.readShellConfig(text())
+  }
+
+  function setOmarchyLogo(shown) {
+    if (!root.bar) return
+    root.omarchyLogoShown = shown
+    // Removing the bar entry only hides the logo; the Omarchy menu and its
+    // hotkey keep working.
+    root.bar.run(shown ? "omarchy bar put omarchy.menu --section left --index 0" : "omarchy plugin disable omarchy.menu")
+  }
+
+  function setWidgetSection(section) {
+    if (!root.bar || section === root.widgetSection) return
+    root.close()
+    root.bar.run("omarchy bar move " + root.moduleName + " --section " + section)
+  }
+
+  readonly property var toggles: [
     { key: "showIcons", label: "Show app icons", description: "An icon for each app open on a workspace." },
     { key: "smallIcons", label: "Small icons", description: "Smaller icons, closer to the text size." },
     { key: "coloredIcons", label: "Colored icons", description: "Off shows the icons in greyscale." },
-    { key: "showNumbers", label: "Show numbers", description: "Off hides the number on workspaces that have icons." }
+    { key: "showNumbers", label: "Show numbers", description: "Off hides the number on workspaces that have icons." },
+    { key: "omarchyLogo", label: "Show Omarchy logo", description: "The Omarchy menu button on the bar. The menu hotkey keeps working." }
   ]
 
-  function optionValue(key) {
+  readonly property var choices: [
+    { key: "widgetSection", label: "Bar section" },
+    { key: "iconPosition", label: "Icon position" },
+    { key: "symbolPosition", label: "Symbol position" }
+  ]
+
+  readonly property var positionOptions: [
+    { value: "left", label: "Left" },
+    { value: "center", label: "Center" },
+    { value: "right", label: "Right" }
+  ]
+
+  function toggleValue(key) {
     if (key === "showIcons") return root.showIcons
     if (key === "smallIcons") return root.smallIcons
     if (key === "coloredIcons") return root.coloredIcons
     if (key === "showNumbers") return root.showNumbers
+    if (key === "omarchyLogo") return root.omarchyLogoShown
     return false
   }
 
-  function toggleOption(index) {
-    var option = root.options[index]
-    if (option) root.setSetting(option.key, !root.optionValue(option.key))
+  function flipToggle(key) {
+    if (key === "omarchyLogo") root.setOmarchyLogo(!root.omarchyLogoShown)
+    else root.setSetting(key, !root.toggleValue(key))
+  }
+
+  function choiceValue(key) {
+    if (key === "widgetSection") return root.widgetSection
+    if (key === "iconPosition") return root.iconPosition
+    if (key === "symbolPosition") return root.symbolPosition
+    return ""
+  }
+
+  function setChoice(key, value) {
+    if (key === "widgetSection") root.setWidgetSection(value)
+    else root.setSetting(key, value)
+  }
+
+  // Step a choice left/right (keyboard), clamped to the ends.
+  function stepChoice(key, direction) {
+    var values = ["left", "center", "right"]
+    var next = values.indexOf(root.choiceValue(key)) + direction
+    if (next >= 0 && next < values.length) root.setChoice(key, values[next])
   }
 
   // ---- Workspaces.
@@ -235,6 +323,10 @@ Panel {
   readonly property color symbolColor: bar ? bar.barForeground : Color.foreground
   readonly property bool vertical: bar ? bar.vertical : false
   readonly property int barSize: bar ? bar.barSize : Style.bar.sizeHorizontal
+  readonly property var workspaceList: root.workspaceIds()
+  // Slot the grid symbol takes in the row; workspaces after it shift by one.
+  readonly property int symbolSlot: root.symbolPosition === "left" ? 0
+    : (root.symbolPosition === "right" ? root.workspaceList.length : Math.ceil(root.workspaceList.length / 2))
 
   implicitWidth: layout.implicitWidth + trailingGap
   implicitHeight: layout.implicitHeight
@@ -243,12 +335,14 @@ Panel {
     id: layout
     anchors.fill: parent
     anchors.rightMargin: root.trailingGap
-    columns: root.vertical ? 1 : 2
-    columnSpacing: Style.space(1)
-    rowSpacing: Style.space(2)
+    columns: root.vertical ? 1 : root.workspaceList.length + 1
+    columnSpacing: root.vertical ? 0 : Style.space(1)
+    rowSpacing: root.vertical ? Style.space(2) : 0
 
     WidgetButton {
       id: launcher
+      Layout.row: root.vertical ? root.symbolSlot : 0
+      Layout.column: root.vertical ? 0 : root.symbolSlot
       bar: root.bar
       hasVisualContent: true
       labelVisible: false
@@ -279,90 +373,120 @@ Panel {
       }
     }
 
-    GridLayout {
-      id: grid
-      columns: root.vertical ? 1 : root.workspaceIds().length
-      columnSpacing: root.vertical ? 0 : Style.space(1)
-      rowSpacing: root.vertical ? Style.space(2) : 0
+    Repeater {
+      model: root.workspaceList
 
-      Repeater {
-        model: root.workspaceIds()
+      WidgetButton {
+        id: button
+        required property int modelData
+        required property int index
 
-        WidgetButton {
-          id: button
-          required property int modelData
+        readonly property int slot: index < root.symbolSlot ? index : index + 1
+        readonly property var workspace: root.workspaceById(modelData)
+        readonly property bool occupied: workspace !== null && workspace.toplevels.values.length > 0
+        readonly property bool focused: Hyprland.focusedWorkspace !== null && Hyprland.focusedWorkspace.id === modelData
+        readonly property var icons: root.vertical ? [] : root.workspaceIcons(workspace)
+        // "center" splits the icons around the number.
+        readonly property int iconsBefore: root.iconPosition === "left" ? icons.length
+          : (root.iconPosition === "right" ? 0 : Math.floor(icons.length / 2))
+        // Workspaces with icons may drop their number; the focus mark and
+        // empty workspaces always keep a label so every slot stays visible.
+        readonly property string label: focused ? "󱓻"
+          : (root.showNumbers || icons.length === 0 ? (modelData === 10 ? "0" : String(modelData)) : "")
 
-          readonly property var workspace: root.workspaceById(modelData)
-          readonly property bool occupied: workspace !== null && workspace.toplevels.values.length > 0
-          readonly property bool focused: Hyprland.focusedWorkspace !== null && Hyprland.focusedWorkspace.id === modelData
-          readonly property var icons: root.vertical ? [] : root.workspaceIcons(workspace)
-          // Workspaces with icons may drop their number; the focus mark and
-          // empty workspaces always keep a label so every slot stays visible.
-          readonly property string label: focused ? "󱓻"
-            : (root.showNumbers || icons.length === 0 ? (modelData === 10 ? "0" : String(modelData)) : "")
+        Layout.row: root.vertical ? slot : 0
+        Layout.column: root.vertical ? 0 : slot
+        bar: root.bar
+        text: focused ? "󱓻" : (modelData === 10 ? "0" : String(modelData))
+        labelVisible: false
+        opacity: occupied || focused ? 1 : 0.5
+        horizontalMargin: 6
+        verticalPadding: 6
+        fixedWidth: root.vertical ? root.barSize : Math.max(Style.space(20), content.implicitWidth + Style.spaceReal(6) * 2)
+        fixedHeight: root.barSize
+        onPressed: function(mouseButton) {
+          if (mouseButton === Qt.RightButton) root.toggle()
+          else root.focusWorkspace(modelData)
+        }
 
-          bar: root.bar
-          text: focused ? "󱓻" : (modelData === 10 ? "0" : String(modelData))
-          labelVisible: false
-          opacity: occupied || focused ? 1 : 0.5
-          horizontalMargin: 6
-          verticalPadding: 6
-          fixedWidth: root.vertical ? root.barSize : Math.max(Style.space(20), content.implicitWidth + Style.spaceReal(6) * 2)
-          fixedHeight: root.barSize
-          onPressed: function(mouseButton) {
-            if (mouseButton === Qt.RightButton) root.toggle()
-            else root.focusWorkspace(modelData)
+        Row {
+          id: content
+          anchors.centerIn: parent
+          spacing: Style.spaceReal(3)
+
+          Repeater {
+            model: button.icons.slice(0, button.iconsBefore)
+            delegate: appIcon
           }
 
-          Row {
-            id: content
-            anchors.centerIn: parent
-            spacing: Style.spaceReal(3)
+          Text {
+            visible: button.label !== ""
+            anchors.verticalCenter: parent.verticalCenter
+            textFormat: Text.PlainText
+            text: button.label
+            color: button.foreground
+            font.family: button.fontFamily
+            font.pixelSize: button.fontSize
+            renderType: Text.NativeRendering
+          }
 
-            Text {
-              visible: button.label !== ""
-              anchors.verticalCenter: parent.verticalCenter
-              textFormat: Text.PlainText
-              text: button.label
-              color: button.foreground
-              font.family: button.fontFamily
-              font.pixelSize: button.fontSize
-              renderType: Text.NativeRendering
-            }
-
-            Repeater {
-              model: button.icons
-
-              Image {
-                required property string modelData
-                anchors.verticalCenter: parent.verticalCenter
-                width: root.iconSize
-                height: root.iconSize
-                fillMode: Image.PreserveAspectFit
-                sourceSize.width: Math.round(root.iconSize * Screen.devicePixelRatio)
-                sourceSize.height: Math.round(root.iconSize * Screen.devicePixelRatio)
-                source: modelData
-                smooth: true
-                layer.enabled: !root.coloredIcons
-                layer.effect: MultiEffect {
-                  saturation: -1
-                }
-              }
-            }
+          Repeater {
+            model: button.icons.slice(button.iconsBefore)
+            delegate: appIcon
           }
         }
       }
     }
   }
 
+  Component {
+    id: appIcon
+
+    Image {
+      required property string modelData
+      anchors.verticalCenter: parent ? parent.verticalCenter : undefined
+      width: root.iconSize
+      height: root.iconSize
+      fillMode: Image.PreserveAspectFit
+      sourceSize.width: Math.round(root.iconSize * Screen.devicePixelRatio)
+      sourceSize.height: Math.round(root.iconSize * Screen.devicePixelRatio)
+      source: modelData
+      smooth: true
+      layer.enabled: !root.coloredIcons
+      layer.effect: MultiEffect {
+        saturation: -1
+      }
+    }
+  }
+
   // ---- Settings popup.
 
+  // Keyboard cursor over the popup rows: toggles first, then the choices.
   property int cursorIndex: -1
+  readonly property int rowCount: toggles.length + choices.length
   readonly property color panelForeground: bar ? bar.foreground : Color.foreground
   readonly property string panelFont: bar ? bar.fontFamily : Style.font.family
 
+  function activateRow(row, direction) {
+    if (row < 0) return
+    if (row < root.toggles.length) {
+      root.flipToggle(root.toggles[row].key)
+      return
+    }
+    var choice = root.choices[row - root.toggles.length]
+    if (!choice) return
+    if (direction !== 0) {
+      root.stepChoice(choice.key, direction)
+    } else {
+      // Enter cycles through the three values.
+      var values = ["left", "center", "right"]
+      root.setChoice(choice.key, values[(values.indexOf(root.choiceValue(choice.key)) + 1) % values.length])
+    }
+  }
+
   onOpenedChanged: if (opened) {
     cursorIndex = -1
+    shellConfigFile.reload()
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
 
@@ -373,47 +497,110 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(340))
-    contentHeight: panel.fittedContentHeight(column.implicitHeight)
+    contentWidth: panel.fittedContentWidth(Style.space(360))
+    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(640))
 
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
       onMoveRequested: function(dx, dy) {
-        if (dy === 0) return
-        if (root.cursorIndex < 0) root.cursorIndex = 0
-        else root.cursorIndex = Math.max(0, Math.min(root.options.length - 1, root.cursorIndex + dy))
+        if (root.cursorIndex < 0) { root.cursorIndex = 0; return }
+        if (dy !== 0) root.cursorIndex = Math.max(0, Math.min(root.rowCount - 1, root.cursorIndex + dy))
+        else if (dx !== 0 && root.cursorIndex >= root.toggles.length) root.activateRow(root.cursorIndex, dx)
       }
-      onActivateRequested: if (root.cursorIndex >= 0) root.toggleOption(root.cursorIndex)
+      onActivateRequested: root.activateRow(root.cursorIndex, 0)
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
 
-      Column {
-        id: column
-        width: parent.width
-        spacing: Style.space(10)
+      Flickable {
+        id: flick
+        anchors.fill: parent
+        contentWidth: width
+        contentHeight: column.implicitHeight
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        interactive: contentHeight > height
 
-        PanelSectionHeader {
-          text: "WORKSPACE ICONS"
-          foreground: root.panelForeground
-          fontFamily: root.panelFont
-        }
+        Column {
+          id: column
+          width: flick.width
+          spacing: Style.space(10)
 
-        Repeater {
-          model: root.options
-
-          Toggle {
-            required property var modelData
-            required property int index
-            width: column.width
-            label: modelData.label
-            description: modelData.description
-            checked: root.optionValue(modelData.key)
-            hasCursor: root.cursorIndex === index
+          PanelSectionHeader {
+            text: "WORKSPACE ICONS"
             foreground: root.panelForeground
             fontFamily: root.panelFont
-            onHovered: function(h) { if (h) root.cursorIndex = index }
-            onClicked: root.toggleOption(index)
+          }
+
+          Repeater {
+            model: root.toggles
+
+            Toggle {
+              required property var modelData
+              required property int index
+              width: column.width
+              label: modelData.label
+              description: modelData.description
+              checked: root.toggleValue(modelData.key)
+              hasCursor: root.cursorIndex === index
+              foreground: root.panelForeground
+              fontFamily: root.panelFont
+              onHovered: function(h) { if (h) root.cursorIndex = index }
+              onClicked: root.flipToggle(modelData.key)
+            }
+          }
+
+          PanelSeparator {
+            foreground: root.panelForeground
+          }
+
+          PanelSectionHeader {
+            text: "POSITION"
+            foreground: root.panelForeground
+            fontFamily: root.panelFont
+          }
+
+          Repeater {
+            model: root.choices
+
+            Item {
+              id: choiceRow
+              required property var modelData
+              required property int index
+              readonly property int row: root.toggles.length + index
+              width: column.width
+              implicitHeight: Math.max(choiceLabel.implicitHeight, group.implicitHeight)
+
+              Text {
+                id: choiceLabel
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.right: group.left
+                anchors.rightMargin: Style.space(10)
+                textFormat: Text.PlainText
+                text: choiceRow.modelData.label
+                color: root.panelForeground
+                font.family: root.panelFont
+                font.pixelSize: Style.font.body
+                elide: Text.ElideRight
+              }
+
+              ButtonGroup {
+                id: group
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                options: root.positionOptions
+                value: root.choiceValue(choiceRow.modelData.key)
+                focusable: false
+                cursorIndex: root.cursorIndex === choiceRow.row
+                  ? root.positionOptions.findIndex(function(o) { return o.value === group.value }) : -1
+                foreground: root.panelForeground
+                fontFamily: root.panelFont
+                fontSize: Style.font.bodySmall
+                onChanged: function(v) { root.setChoice(choiceRow.modelData.key, v) }
+                onHovered: function(i, h) { if (h) root.cursorIndex = choiceRow.row }
+              }
+            }
           }
         }
       }

@@ -27,8 +27,18 @@ workspace) to open the settings:
 - **Small icons**
 - **Colored icons** (off shows greyscale icons)
 - **Show numbers** (off hides the number on workspaces that have icons)
+- **Show Omarchy logo** (hides the Omarchy menu button on the bar; the menu
+  hotkey keeps working)
 
-Arrow keys or `j`/`k` move between options, Enter toggles, Esc closes.
+And three left / center / right choices:
+
+- **Bar section**: which section of the bar the widget sits in
+- **Icon position**: icons before the number, split around it, or after it
+- **Symbol position**: the grid symbol before, in the middle of, or after the
+  workspaces
+
+Arrow keys or `j`/`k` move between rows, `h`/`l` change a left / center / right
+choice, Enter toggles, Esc closes.
 
 ### Hotkey
 

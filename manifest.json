@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "woodenplastic.workspace-icons",
   "name": "Workspace Icons",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "author": "Adrian Wild",
   "license": "MIT",
   "description": "Workspace number indicators that also show an icon for each app open on the workspace, including the program running inside terminals.",
@@ -28,7 +28,9 @@
       "coloredIcons": true,
       "showNumbers": true,
       "showTerminalPrograms": true,
-      "maxIcons": 4
+      "maxIcons": 4,
+      "iconPosition": "right",
+      "symbolPosition": "left"
     },
     "schema": [
       {
@@ -56,6 +58,30 @@
         "label": "Show numbers",
         "defaultValue": true,
         "description": "Off hides the number on workspaces that have icons."
+      },
+      {
+        "key": "iconPosition",
+        "type": "enum",
+        "label": "Icon position",
+        "options": [
+          "left",
+          "center",
+          "right"
+        ],
+        "defaultValue": "right",
+        "description": "Icons before the number, split around it, or after it."
+      },
+      {
+        "key": "symbolPosition",
+        "type": "enum",
+        "label": "Symbol position",
+        "options": [
+          "left",
+          "center",
+          "right"
+        ],
+        "defaultValue": "left",
+        "description": "Where the grid symbol sits among the workspaces."
       },
       {
         "key": "showTerminalPrograms",
