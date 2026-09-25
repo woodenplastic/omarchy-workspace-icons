@@ -32,6 +32,9 @@ Panel {
   readonly property bool showIcons: option("showIcons", true) !== false
   readonly property bool smallIcons: option("smallIcons", false) === true
   readonly property bool coloredIcons: option("coloredIcons", true) !== false
+  // With tinted icons, mark the focused workspace by showing its icons in
+  // full color instead of the focus mark.
+  readonly property bool colorFocused: option("colorFocused", false) === true
   readonly property bool showNumbers: option("showNumbers", true) !== false
   readonly property bool showTerminalPrograms: option("showTerminalPrograms", true) !== false
   readonly property int maxIcons: Math.max(1, Number(option("maxIcons", 4)))
@@ -131,6 +134,7 @@ Panel {
     { key: "showIcons", label: "Show app icons", description: "An icon for each app open on a workspace." },
     { key: "smallIcons", label: "Small icons", description: "Smaller icons, closer to the text size." },
     { key: "coloredIcons", label: "Colored icons", description: "Off tints the icons in the theme's accent color." },
+    { key: "colorFocused", label: "Color the focused workspace", description: "With colored icons off, the focused workspace shows its icons in color instead of the focus mark." },
     { key: "showNumbers", label: "Show numbers", description: "Off hides the number on workspaces that have icons." },
     { key: "omarchyLogo", label: "Show Omarchy logo", description: "The Omarchy menu button on the bar. The menu hotkey keeps working." }
   ]
@@ -155,6 +159,7 @@ Panel {
     if (key === "showIcons") return root.showIcons
     if (key === "smallIcons") return root.smallIcons
     if (key === "coloredIcons") return root.coloredIcons
+    if (key === "colorFocused") return root.colorFocused
     if (key === "showNumbers") return root.showNumbers
     if (key === "omarchyLogo") return root.omarchyLogoShown
     return false
@@ -420,9 +425,13 @@ Panel {
         readonly property bool focused: Hyprland.focusedWorkspace !== null && Hyprland.focusedWorkspace.id === modelData
         readonly property var icons: root.vertical ? [] : root.workspaceIcons(workspace)
         readonly property int iconsBefore: root.iconPosition === "left" ? icons.length : 0
+        // Full-color icons stand in for the focus mark; an empty focused
+        // workspace has no icons to color, so it keeps the mark.
+        readonly property bool focusByColor: focused && icons.length > 0 && root.colorFocused && !root.coloredIcons
+        readonly property bool colorIcons: root.coloredIcons || focusByColor
         // Workspaces with icons may drop their number; the focus mark and
         // empty workspaces always keep a label so every slot stays visible.
-        readonly property string label: focused ? "󱓻"
+        readonly property string label: focused && !focusByColor ? "󱓻"
           : (root.showNumbers || icons.length === 0 ? (modelData === 10 ? "0" : String(modelData)) : "")
 
         bar: root.bar
@@ -444,7 +453,7 @@ Panel {
           spacing: Style.spaceReal(3)
 
           Repeater {
-            model: button.icons.slice(0, button.iconsBefore)
+            model: button.icons.slice(0, button.iconsBefore).map(function(source) { return { source: source, colored: button.colorIcons } })
             delegate: appIcon
           }
 
@@ -460,7 +469,7 @@ Panel {
           }
 
           Repeater {
-            model: button.icons.slice(button.iconsBefore)
+            model: button.icons.slice(button.iconsBefore).map(function(source) { return { source: source, colored: button.colorIcons } })
             delegate: appIcon
           }
         }
@@ -472,16 +481,16 @@ Panel {
     id: appIcon
 
     Image {
-      required property string modelData
+      required property var modelData
       anchors.verticalCenter: parent ? parent.verticalCenter : undefined
       width: root.iconSize
       height: root.iconSize
       fillMode: Image.PreserveAspectFit
       sourceSize.width: Math.round(root.iconSize * Screen.devicePixelRatio)
       sourceSize.height: Math.round(root.iconSize * Screen.devicePixelRatio)
-      source: modelData
+      source: modelData.source
       smooth: true
-      layer.enabled: !root.coloredIcons
+      layer.enabled: !modelData.colored
       // Tinted with the theme's accent color, so they follow theme changes.
       layer.effect: MultiEffect {
         colorization: 1.0
