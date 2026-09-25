@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "woodenplastic.workspace-icons",
   "name": "Workspace Icons",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "author": "Adrian Wild",
   "license": "MIT",
   "description": "Workspace number indicators that also show an icon for each app open on the workspace, including the program running inside terminals.",
@@ -29,7 +29,8 @@
       "showTerminalPrograms": true,
       "maxIcons": 4,
       "iconPosition": "right",
-      "colorFocused": false
+      "colorFocused": false,
+      "tintStyle": "theme"
     },
     "schema": [
       {
@@ -43,7 +44,18 @@
         "type": "boolean",
         "label": "Colored icons",
         "defaultValue": true,
-        "description": "Off tints the icons in the theme's accent color."
+        "description": "Off tints the icons, see Tint."
+      },
+      {
+        "key": "tintStyle",
+        "type": "enum",
+        "label": "Tint",
+        "options": [
+          "theme",
+          "greyscale"
+        ],
+        "defaultValue": "theme",
+        "description": "With colored icons off: tint icons and numbers in the theme's accent color, or show icons in greyscale."
       },
       {
         "key": "colorFocused",

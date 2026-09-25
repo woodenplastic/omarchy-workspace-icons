@@ -34,6 +34,10 @@ Panel {
   // With tinted icons, mark the focused workspace by showing its icons in
   // full color instead of the focus mark.
   readonly property bool colorFocused: option("colorFocused", false) === true
+  // How icons look with colored icons off: tinted in the theme's accent color
+  // ("theme", which also colors the numbers) or "greyscale".
+  readonly property string tintStyle: option("tintStyle", "theme") === "greyscale" ? "greyscale" : "theme"
+  readonly property bool themeTint: !coloredIcons && tintStyle === "theme"
   readonly property bool showNumbers: option("showNumbers", true) !== false
   readonly property bool showTerminalPrograms: option("showTerminalPrograms", true) !== false
   readonly property int maxIcons: Math.max(1, Number(option("maxIcons", 4)))
@@ -133,8 +137,10 @@ Panel {
 
   readonly property var toggles: [
     { key: "showIcons", label: "app icons", description: "An icon for each app open on a workspace." },
-    { key: "coloredIcons", label: "Colored icons", description: "Off tints the icons in the theme's accent color." },
+    { key: "coloredIcons", label: "Colored icons", description: "Off tints the icons, see Tint below." },
     // Sub-option of Colored icons, shown only while that is off.
+    { key: "tintStyle", label: "Tint", parentKey: "coloredIcons", shownWhen: false,
+      options: [{ value: "theme", label: "Theme" }, { value: "greyscale", label: "Greyscale" }] },
     { key: "colorFocused", label: "Color the focused workspace", description: "Show its icons in color instead of the focus mark.", parentKey: "coloredIcons", shownWhen: false },
     { key: "showNumbers", label: "Workspace numbers", description: "Off hides the number on workspaces that have icons." },
     { key: "omarchyLogo", label: "Show Omarchy logo", description: "The Omarchy menu button on the bar. The menu hotkey keeps working." }
@@ -188,6 +194,7 @@ Panel {
   function choiceValue(key) {
     if (key === "widgetSection") return root.widgetSection
     if (key === "iconPosition") return root.iconPosition
+    if (key === "tintStyle") return root.tintStyle
     if (key === "symbolPosition") return root.symbolInTray ? "tray" : (root.symbolSection || root.widgetSection)
     return ""
   }
@@ -484,7 +491,7 @@ Panel {
             anchors.verticalCenter: parent.verticalCenter
             textFormat: Text.PlainText
             text: button.label
-            color: button.foreground
+            color: root.themeTint ? Color.accent : button.foreground
             font.family: button.fontFamily
             font.pixelSize: button.fontSize
             renderType: Text.NativeRendering
@@ -513,9 +520,10 @@ Panel {
       source: modelData.source
       smooth: true
       layer.enabled: !modelData.colored
-      // Tinted with the theme's accent color, so they follow theme changes.
+      // Tinted with the theme's accent color (so they follow theme changes) or greyscale.
       layer.effect: MultiEffect {
-        colorization: 1.0
+        saturation: root.tintStyle === "greyscale" ? -1 : 0
+        colorization: root.tintStyle === "theme" ? 1.0 : 0
         colorizationColor: Color.accent
       }
     }
@@ -529,13 +537,19 @@ Panel {
   readonly property color panelForeground: bar ? bar.foreground : Color.foreground
   readonly property string panelFont: bar ? bar.fontFamily : Style.font.family
 
+  // Toggle rows that carry `options` are choices shown in the toggle list.
+  function rowChoice(row) {
+    if (row < root.toggles.length) return root.toggles[row].options ? root.toggles[row] : null
+    return root.choices[row - root.toggles.length] || null
+  }
+
   function activateRow(row, direction) {
     if (row < 0) return
-    if (row < root.toggles.length) {
+    if (row < root.toggles.length && !root.toggles[row].options) {
       root.flipToggle(root.toggles[row].key)
       return
     }
-    var choice = root.choices[row - root.toggles.length]
+    var choice = root.rowChoice(row)
     if (!choice) return
     if (direction !== 0) {
       root.stepChoice(choice, direction)
@@ -568,7 +582,7 @@ Panel {
       onMoveRequested: function(dx, dy) {
         if (root.cursorIndex < 0) { root.cursorIndex = 0; return }
         if (dy !== 0) root.moveCursor(dy > 0 ? 1 : -1)
-        else if (dx !== 0 && root.cursorIndex >= root.toggles.length) root.activateRow(root.cursorIndex, dx)
+        else if (dx !== 0 && root.rowChoice(root.cursorIndex)) root.activateRow(root.cursorIndex, dx)
       }
       onActivateRequested: root.activateRow(root.cursorIndex, 0)
       onCloseRequested: root.close()
@@ -597,21 +611,64 @@ Panel {
           Repeater {
             model: root.toggles
 
-            Toggle {
+            Item {
+              id: toggleRow
               required property var modelData
               required property int index
+              readonly property bool isChoice: !!modelData.options
               readonly property real indent: modelData.parentKey ? Style.space(24) : 0
               visible: root.rowVisible(index)
               x: indent
               width: column.width - indent
-              label: modelData.label
-              description: modelData.description
-              checked: root.toggleValue(modelData.key)
-              hasCursor: root.cursorIndex === index
-              foreground: root.panelForeground
-              fontFamily: root.panelFont
-              onHovered: function(h) { if (h) root.cursorIndex = index }
-              onClicked: root.flipToggle(modelData.key)
+              implicitHeight: isChoice ? subChoice.implicitHeight : toggle.implicitHeight
+
+              Toggle {
+                id: toggle
+                visible: !toggleRow.isChoice
+                width: parent.width
+                label: toggleRow.modelData.label
+                description: toggleRow.modelData.description || ""
+                checked: root.toggleValue(toggleRow.modelData.key)
+                hasCursor: root.cursorIndex === toggleRow.index
+                foreground: root.panelForeground
+                fontFamily: root.panelFont
+                onHovered: function(h) { if (h) root.cursorIndex = toggleRow.index }
+                onClicked: root.flipToggle(toggleRow.modelData.key)
+              }
+
+              Item {
+                id: subChoice
+                visible: toggleRow.isChoice
+                width: parent.width
+                implicitHeight: Math.max(subLabel.implicitHeight, subGroup.implicitHeight)
+
+                Text {
+                  id: subLabel
+                  anchors.left: parent.left
+                  anchors.verticalCenter: parent.verticalCenter
+                  textFormat: Text.PlainText
+                  text: toggleRow.modelData.label
+                  color: root.panelForeground
+                  font.family: root.panelFont
+                  font.pixelSize: Style.font.body
+                }
+
+                ButtonGroup {
+                  id: subGroup
+                  anchors.right: parent.right
+                  anchors.verticalCenter: parent.verticalCenter
+                  options: toggleRow.isChoice ? toggleRow.modelData.options : []
+                  value: root.choiceValue(toggleRow.modelData.key)
+                  focusable: false
+                  cursorIndex: root.cursorIndex === toggleRow.index && toggleRow.isChoice
+                    ? root.choiceValues(toggleRow.modelData).indexOf(subGroup.value) : -1
+                  foreground: root.panelForeground
+                  fontFamily: root.panelFont
+                  fontSize: Style.font.bodySmall
+                  onChanged: function(v) { root.setChoice(toggleRow.modelData.key, v) }
+                  onHovered: function(i, h) { if (h) root.cursorIndex = toggleRow.index }
+                }
+              }
             }
           }
 
