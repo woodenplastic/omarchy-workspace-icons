@@ -14,40 +14,59 @@ import qs.Ui
 Panel {
   id: root
   moduleName: "woodenplastic.workspace-icons"
-  ipcTarget: "woodenplastic.workspace-icons"
+  // The grid symbol can sit in its own bar section as a second entry of this
+  // widget with `"mode": "symbol"`; that entry draws only the symbol.
+  readonly property bool symbolMode: settings && settings.mode === "symbol"
+  ipcTarget: symbolMode ? "" : "woodenplastic.workspace-icons"
 
-  // ---- Settings (inline on the shell.json entry).
+  // ---- Settings. The workspaces entry owns them; the symbol entry reads
+  //      them back from shell.json so its popup shows the same values.
 
-  readonly property bool showIcons: setting("showIcons", true) !== false
-  readonly property bool smallIcons: setting("smallIcons", false) === true
-  readonly property bool coloredIcons: setting("coloredIcons", true) !== false
-  readonly property bool showNumbers: setting("showNumbers", true) !== false
-  readonly property bool showTerminalPrograms: setting("showTerminalPrograms", true) !== false
-  readonly property int maxIcons: Math.max(1, Number(setting("maxIcons", 4)))
-  // Where the app icons sit around the workspace number, and where the grid
-  // symbol sits among the workspaces: "left", "center" or "right".
-  readonly property string iconPosition: root.positionSetting("iconPosition", "right")
-  readonly property string symbolPosition: root.positionSetting("symbolPosition", "left")
+  readonly property var widgetSettings: symbolMode ? mainSettings : settings
+
+  function option(name, fallback) {
+    var value = widgetSettings ? widgetSettings[name] : undefined
+    return value === undefined || value === null ? fallback : value
+  }
+
+  readonly property bool showIcons: option("showIcons", true) !== false
+  readonly property bool smallIcons: option("smallIcons", false) === true
+  readonly property bool coloredIcons: option("coloredIcons", true) !== false
+  readonly property bool showNumbers: option("showNumbers", true) !== false
+  readonly property bool showTerminalPrograms: option("showTerminalPrograms", true) !== false
+  readonly property int maxIcons: Math.max(1, Number(option("maxIcons", 4)))
+  // Where the app icons sit around the workspace number: "left", "center" or "right".
+  readonly property string iconPosition: root.positionOption("iconPosition", "right")
   // Map a window class or terminal program name to a theme icon name or an
   // absolute image path, for apps without an icon of their own.
-  readonly property var iconOverrides: setting("iconOverrides", ({}))
+  readonly property var iconOverrides: option("iconOverrides", ({}))
 
   readonly property real iconSize: Math.round(Style.font.body * (smallIcons ? 0.9 : 1.15))
 
-  function positionSetting(key, fallback) {
-    var value = String(setting(key, fallback))
+  function positionOption(key, fallback) {
+    var value = String(option(key, fallback))
     return ["left", "center", "right"].indexOf(value) !== -1 ? value : fallback
   }
 
+  readonly property string configScript: Qt.resolvedUrl("scripts/config").toString().replace(/^file:\/\//, "")
+
+  function runConfig(args) {
+    if (!root.bar) return
+    root.bar.run(Util.shellQuote(root.configScript) + " " + args.map(Util.shellQuote).join(" "))
+  }
+
+  // The shell's own inline-settings update rewrites every entry with this id,
+  // which would turn the symbol entry into a second workspaces widget, so
+  // settings go through scripts/config instead.
   function setSetting(key, value) {
-    var entry = { id: root.moduleName }
-    for (var k in root.settings) if (k !== "id") entry[k] = root.settings[k]
-    entry[key] = value
-    // Applied locally first so the bar updates on the click itself; the
-    // shell.json write comes back through the bar as the same value.
-    root.settings = entry
-    if (root.bar && root.bar.shell && typeof root.bar.shell.updateEntryInline === "function")
-      root.bar.shell.updateEntryInline(root.moduleName, entry)
+    if (!root.symbolMode) {
+      // Applied locally first so the bar updates on the click itself.
+      var entry = {}
+      for (var k in root.settings) entry[k] = root.settings[k]
+      entry[key] = value
+      root.settings = entry
+    }
+    root.runConfig(["set", key, JSON.stringify(value)])
   }
 
   // ---- Bar layout state owned by other entries (the Omarchy logo and this
@@ -55,22 +74,33 @@ Panel {
 
   property bool omarchyLogoShown: true
   property string widgetSection: "left"
+  // Section of the separate symbol entry; "" while the symbol is drawn inline.
+  property string symbolSection: ""
+  property var mainSettings: ({})
 
   function readShellConfig(text) {
     var config
     try { config = JSON.parse(text) } catch (e) { return }
     var layout = config && config.bar && config.bar.layout ? config.bar.layout : {}
     var logo = false
+    var symbol = ""
     var sections = ["left", "center", "right"]
     for (var s = 0; s < sections.length; s++) {
       var entries = layout[sections[s]] || []
       for (var i = 0; i < entries.length; i++) {
-        var id = entries[i] && entries[i].id
-        if (id === "omarchy.menu") logo = true
-        if (id === root.moduleName) root.widgetSection = sections[s]
+        var entry = entries[i] || {}
+        if (entry.id === "omarchy.menu") logo = true
+        if (entry.id !== root.moduleName) continue
+        if (entry.mode === "symbol") {
+          symbol = sections[s]
+        } else {
+          root.widgetSection = sections[s]
+          root.mainSettings = entry
+        }
       }
     }
     root.omarchyLogoShown = logo
+    root.symbolSection = symbol
   }
 
   FileView {
@@ -91,9 +121,15 @@ Panel {
   }
 
   function setWidgetSection(section) {
-    if (!root.bar || section === root.widgetSection) return
+    if (section === root.widgetSection) return
     root.close()
-    root.bar.run("omarchy bar move " + root.moduleName + " --section " + section)
+    root.runConfig(["main", section])
+  }
+
+  function setSymbolSection(section) {
+    if (section === root.symbolSection) return
+    root.close()
+    root.runConfig(["symbol", section])
   }
 
   readonly property var toggles: [
@@ -107,7 +143,7 @@ Panel {
   readonly property var choices: [
     { key: "widgetSection", label: "Bar section" },
     { key: "iconPosition", label: "Icon position" },
-    { key: "symbolPosition", label: "Symbol position" }
+    { key: "symbolPosition", label: "Grid symbol" }
   ]
 
   readonly property var positionOptions: [
@@ -133,12 +169,13 @@ Panel {
   function choiceValue(key) {
     if (key === "widgetSection") return root.widgetSection
     if (key === "iconPosition") return root.iconPosition
-    if (key === "symbolPosition") return root.symbolPosition
+    if (key === "symbolPosition") return root.symbolSection || root.widgetSection
     return ""
   }
 
   function setChoice(key, value) {
     if (key === "widgetSection") root.setWidgetSection(value)
+    else if (key === "symbolPosition") root.setSymbolSection(value)
     else root.setSetting(key, value)
   }
 
@@ -271,7 +308,7 @@ Panel {
   }
 
   function refreshTerminalPrograms() {
-    if (!root.showIcons || !root.showTerminalPrograms || programProbe.running) return
+    if (root.symbolMode || !root.showIcons || !root.showTerminalPrograms || programProbe.running) return
     var pids = root.terminalPids()
     if (pids.length === 0) {
       root.terminalPrograms = ({})
@@ -309,7 +346,7 @@ Panel {
 
   Timer {
     interval: Math.max(1, Number(root.setting("terminalPollSeconds", 2))) * 1000
-    running: root.showIcons && root.showTerminalPrograms
+    running: !root.symbolMode && root.showIcons && root.showTerminalPrograms
     repeat: true
     triggeredOnStart: true
     onTriggered: root.refreshTerminalPrograms()
@@ -323,10 +360,9 @@ Panel {
   readonly property color symbolColor: bar ? bar.barForeground : Color.foreground
   readonly property bool vertical: bar ? bar.vertical : false
   readonly property int barSize: bar ? bar.barSize : Style.bar.sizeHorizontal
-  readonly property var workspaceList: root.workspaceIds()
-  // Slot the grid symbol takes in the row; workspaces after it shift by one.
-  readonly property int symbolSlot: root.symbolPosition === "left" ? 0
-    : (root.symbolPosition === "right" ? root.workspaceList.length : Math.ceil(root.workspaceList.length / 2))
+  readonly property var workspaceList: root.symbolMode ? [] : root.workspaceIds()
+  // The symbol is drawn in front of the workspaces until it gets its own entry.
+  readonly property bool showSymbol: root.symbolMode || root.symbolSection === ""
 
   implicitWidth: layout.implicitWidth + trailingGap
   implicitHeight: layout.implicitHeight
@@ -341,8 +377,7 @@ Panel {
 
     WidgetButton {
       id: launcher
-      Layout.row: root.vertical ? root.symbolSlot : 0
-      Layout.column: root.vertical ? 0 : root.symbolSlot
+      visible: root.showSymbol
       bar: root.bar
       hasVisualContent: true
       labelVisible: false
@@ -381,7 +416,6 @@ Panel {
         required property int modelData
         required property int index
 
-        readonly property int slot: index < root.symbolSlot ? index : index + 1
         readonly property var workspace: root.workspaceById(modelData)
         readonly property bool occupied: workspace !== null && workspace.toplevels.values.length > 0
         readonly property bool focused: Hyprland.focusedWorkspace !== null && Hyprland.focusedWorkspace.id === modelData
@@ -394,8 +428,6 @@ Panel {
         readonly property string label: focused ? "󱓻"
           : (root.showNumbers || icons.length === 0 ? (modelData === 10 ? "0" : String(modelData)) : "")
 
-        Layout.row: root.vertical ? slot : 0
-        Layout.column: root.vertical ? 0 : slot
         bar: root.bar
         text: focused ? "󱓻" : (modelData === 10 ? "0" : String(modelData))
         labelVisible: false
@@ -492,7 +524,7 @@ Panel {
 
   KeyboardPanel {
     id: panel
-    anchorItem: launcher
+    anchorItem: root.showSymbol ? launcher : layout
     owner: root
     bar: root.bar
     open: root.opened

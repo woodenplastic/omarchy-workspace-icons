@@ -1,0 +1,55 @@
+#!/bin/bash
+
+# Edits this widget's entries in ~/.config/omarchy/shell.json. The widget can
+# be on the bar twice (the workspaces, and the grid symbol with mode "symbol"),
+# and the shell's own inline-settings update rewrites every entry with the
+# widget's id, so the settings popup writes through here instead.
+#
+#   config set <key> <json-value>      Set a setting on the workspaces entry
+#   config main <left|center|right>    Move the workspaces to a bar section
+#   config symbol <left|center|right>  Put the grid symbol in a bar section
+
+set -euo pipefail
+
+source omarchy-shell-config
+
+ID="woodenplastic.workspace-icons"
+
+DEFS='
+  def is_main: .id == $id and (.mode // "") != "symbol";
+  def is_symbol: .id == $id and .mode == "symbol";
+  def main_entry: first(.bar.layout[][] | select(is_main)) // {id: $id};
+  def remove(f): .bar.layout |= map_values(map(select(f | not)));
+  # Insert after the first anchor found in the section, else at its end.
+  def place($section; $entry; $anchors):
+    (.bar.layout[$section] | map(.id)) as $ids
+    | ([$anchors[] as $a | $ids | index($a) | select(. != null)] | first) as $i
+    | .bar.layout[$section] |= (if $i == null then . + [$entry] else .[:$i + 1] + [$entry] + .[$i + 1:] end);
+  # The same spots the plugin installer picks for a section.
+  def anchors($section): {left: ["omarchy.workspaces", "omarchy.menu"], center: ["omarchy.weather"], right: ["omarchy.tray"]}[$section];
+'
+
+section_arg() {
+  [[ ${1:-} =~ ^(left|center|right)$ ]] || fail "section must be left, center, or right"
+}
+
+case "${1:-}" in
+set)
+  [[ -n ${2:-} && -n ${3:-} ]] || fail "usage: config set <key> <json-value>"
+  commit "$NORMALIZE | $DEFS .bar.layout |= map_values(map(if is_main then .[\$key] = \$value else . end))" \
+    --arg id "$ID" --arg key "$2" --argjson value "$3"
+  ;;
+main)
+  section_arg "${2:-}"
+  commit "$NORMALIZE | $DEFS main_entry as \$entry | remove(is_main) | place(\$section; \$entry; anchors(\$section))" \
+    --arg id "$ID" --arg section "$2"
+  ;;
+symbol)
+  section_arg "${2:-}"
+  commit "$NORMALIZE | $DEFS remove(is_symbol) | place(\$section; {id: \$id, mode: \"symbol\"}; [\$id] + anchors(\$section))" \
+    --arg id "$ID" --arg section "$2"
+  ;;
+*)
+  fail "usage: config set <key> <json-value> | main <section> | symbol <section>"
+  ;;
+esac

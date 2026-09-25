@@ -34,8 +34,10 @@ And three left / center / right choices:
 
 - **Bar section**: which section of the bar the widget sits in
 - **Icon position**: icons before the number, split around it, or after it
-- **Symbol position**: the grid symbol before, in the middle of, or after the
-  workspaces
+- **Grid symbol**: which section of the bar the grid symbol sits in. It starts
+  in front of the workspaces; once moved, it is its own bar entry
+  (`{"id": "woodenplastic.workspace-icons", "mode": "symbol"}`) and can sit in
+  a different section from them
 
 Arrow keys or `j`/`k` move between rows, `h`/`l` change a left / center / right
 choice, Enter toggles, Esc closes.
