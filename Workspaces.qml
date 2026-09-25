@@ -42,6 +42,8 @@ Panel {
   // Map a window class or terminal program name to a theme icon name or an
   // absolute image path, for apps without an icon of their own.
   readonly property var iconOverrides: option("iconOverrides", ({}))
+  // The grid symbol shown as a system tray icon (scripts/tray-icon) instead of on the bar.
+  readonly property bool symbolInTray: option("symbolInTray", false) === true
 
   readonly property real iconSize: Math.round(Style.font.body * 1.15)
 
@@ -124,7 +126,7 @@ Panel {
   }
 
   function setSymbolSection(section) {
-    if (section === root.symbolSection) return
+    if (section === root.symbolSection && !root.symbolInTray) return
     root.close()
     root.runConfig(["symbol", section])
   }
@@ -147,7 +149,7 @@ Panel {
   readonly property var choices: [
     { key: "widgetSection", label: "Bar section", options: sectionOptions },
     { key: "iconPosition", label: "Icon position", options: [{ value: "left", label: "Left" }, { value: "right", label: "Right" }] },
-    { key: "symbolPosition", label: "Grid symbol", options: sectionOptions }
+    { key: "symbolPosition", label: "Grid symbol", options: sectionOptions.concat([{ value: "tray", label: "Tray" }]) }
   ]
 
   function choiceValues(choice) {
@@ -186,7 +188,7 @@ Panel {
   function choiceValue(key) {
     if (key === "widgetSection") return root.widgetSection
     if (key === "iconPosition") return root.iconPosition
-    if (key === "symbolPosition") return root.symbolSection || root.widgetSection
+    if (key === "symbolPosition") return root.symbolInTray ? "tray" : (root.symbolSection || root.widgetSection)
     return ""
   }
 
@@ -379,7 +381,14 @@ Panel {
   readonly property int barSize: bar ? bar.barSize : Style.bar.sizeHorizontal
   readonly property var workspaceList: root.symbolMode ? [] : root.workspaceIds()
   // The symbol is drawn in front of the workspaces until it gets its own entry.
-  readonly property bool showSymbol: root.symbolMode || root.symbolSection === ""
+  readonly property bool showSymbol: root.symbolMode || (root.symbolSection === "" && !root.symbolInTray)
+
+  // Runs while the symbol is in the tray. A bar per monitor means one widget
+  // per monitor; the helper keeps a single tray icon between them.
+  Process {
+    running: !root.symbolMode && root.symbolInTray
+    command: ["/usr/bin/python3", Qt.resolvedUrl("scripts/tray-icon").toString().replace(/^file:\/\//, "")]
+  }
 
   implicitWidth: layout.implicitWidth + trailingGap
   implicitHeight: layout.implicitHeight

@@ -35,10 +35,14 @@ And where things sit:
 
 - **Bar section**: which section of the bar the widget sits in (left / center / right)
 - **Icon position**: icons left or right of the workspace number
-- **Grid symbol**: which section of the bar the grid symbol sits in. It starts
-  in front of the workspaces; once moved, it is its own bar entry
-  (`{"id": "woodenplastic.workspace-icons", "mode": "symbol"}`) and can sit in
-  a different section from them
+- **Grid symbol**: which section of the bar the grid symbol sits in, or
+  **Tray**. It starts in front of the workspaces; once moved to a section, it
+  is its own bar entry (`{"id": "woodenplastic.workspace-icons", "mode": "symbol"}`)
+  and can sit in a different section from them. With **Tray**, it becomes a
+  system tray icon instead and hides in the tray's drawer behind the arrow
+  like other tray icons; click it to open the settings. The tray icon is served
+  by `scripts/tray-icon`, which uses the system Python's PyGObject that Omarchy
+  ships, and runs only while Tray is selected.
 
 Arrow keys or `j`/`k` move between rows, `h`/`l` change a position, Enter toggles, Esc closes.
 
