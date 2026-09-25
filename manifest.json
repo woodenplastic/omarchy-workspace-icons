@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "woodenplastic.workspace-icons",
   "name": "Workspace Icons",
-  "version": "0.10.0",
+  "version": "1.0.0",
   "author": "Adrian Wild",
   "license": "MIT",
-  "description": "Workspace number indicators that also show an icon for each app open on the workspace, including the program running inside terminals.",
+  "description": "Replaces Omarchy's workspace numbers with numbers plus the icons of the apps on each workspace, so you see at a glance what runs where. Recognizes programs in terminals (nvim, lazygit, claude, tmux, ...) and web apps like Discord or WhatsApp. Keep icons in color or tint them in your theme's accent or text color, with the focused workspace highlighted. Move it to any bar section, settings on the bar or in the tray. Swaps in and out for the stock widget automatically.",
   "kinds": [
     "bar-widget"
   ],
@@ -14,7 +14,7 @@
   },
   "barWidget": {
     "displayName": "Workspace Icons",
-    "description": "Workspace numbers with the icons of the apps on each workspace.",
+    "description": "Workspace numbers with the icons of the apps on each workspace, themed tints and a settings popup.",
     "category": "Compositor",
     "aliases": [
       "workspaces",
@@ -100,5 +100,8 @@
         "description": "One icon per distinct app, in window order."
       }
     ]
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.workspaces"
   }
 }

@@ -6,6 +6,7 @@ import Quickshell.Hyprland
 import Quickshell.Io
 import qs.Commons
 import qs.Ui
+import "Glyphs.js" as Glyphs
 
 // Workspace indicators with the icons of the apps on each workspace.
 //
@@ -89,6 +90,7 @@ Panel {
     var layout = config && config.bar && config.bar.layout ? config.bar.layout : {}
     var logo = false
     var symbol = ""
+    var hasMain = false
     var sections = ["left", "center", "right"]
     for (var s = 0; s < sections.length; s++) {
       var entries = layout[sections[s]] || []
@@ -99,6 +101,7 @@ Panel {
         if (entry.mode === "symbol") {
           symbol = sections[s]
         } else {
+          hasMain = true
           root.widgetSection = sections[s]
           root.mainSettings = entry
         }
@@ -106,6 +109,19 @@ Panel {
     }
     root.omarchyLogoShown = logo
     root.symbolSection = symbol
+    if (root.symbolMode && !hasMain) root.removeOrphanSymbol()
+  }
+
+  // Disabling or removing the plugin puts omarchy.workspaces back in place of
+  // the workspaces entry (manifest `clonedFrom`), but leaves a separate symbol
+  // entry behind. The symbol removes itself then, through Omarchy's config
+  // helper rather than a plugin file, since the plugin folder may already be
+  // gone by the time the command runs.
+  function removeOrphanSymbol() {
+    if (!root.bar) return
+    root.bar.run("bash -c " + Util.shellQuote(
+      'source omarchy-shell-config && commit "$NORMALIZE | .bar.layout |= map_values(map(select((.id == \\"'
+      + root.moduleName + '\\" and .mode == \\"symbol\\") | not)))"'))
   }
 
   FileView {
@@ -138,7 +154,7 @@ Panel {
   }
 
   readonly property var toggles: [
-    { key: "showIcons", label: "app icons", description: "An icon for each app open on a workspace." },
+    { key: "showIcons", label: "App icons", description: "An icon for each app open on a workspace." },
     { key: "coloredIcons", label: "Colored icons", description: "Off tints the icons, see Tint below." },
     // Sub-option of Colored icons, shown only while that is off.
     { key: "tintStyle", label: "Tint", parentKey: "coloredIcons", shownWhen: false,
@@ -244,13 +260,30 @@ Panel {
   }
 
   // ---- App icons.
+  //
+  // Icons come only from what is installed on this computer; the plugin ships
+  // none. Lookup order for a window:
+  //   1. iconOverrides (by window class)
+  //   2. terminals: the program in the terminal's foreground (see programIcon)
+  //   3. web apps: the desktop entry that launches the window's site
+  //   4. the app's desktop entry, then an icon theme icon named after the class
+  //   5. /usr/share/pixmaps or the owning package's icons (scripts/resolve-icons)
+  //   6. a generic app icon
 
   readonly property var shells: ["bash", "zsh", "fish", "sh", "dash", "nu", "xonsh", "elvish", "ksh", "tcsh"]
-  // Terminal window pid -> name of the program in the terminal's foreground.
+  // Interpreters a program can run under; their name says nothing about the program.
+  readonly property var interpreters: ["node", "bun", "deno", "python", "python3", "ruby", "perl", "java", "bash", "sh"]
+  // Window address -> { appId, initialClass, initialTitle, pid } from
+  // `hyprctl clients`; Quickshell's cached copy of it is not reliably filled in.
+  property var clientInfo: ({})
+  // Window pid -> { name, exe } of the program in the foreground of its terminal.
   property var terminalPrograms: ({})
+  // Name -> icon path found by scripts/resolve-icons ("" when none).
+  property var resolvedIcons: ({})
 
   function windowInfo(toplevel) {
-    var ipc = toplevel.lastIpcObject || {}
+    var client = root.clientInfo[String(toplevel.address).replace(/^0x/, "")]
+    var ipc = client || toplevel.lastIpcObject || {}
     var appId = toplevel.wayland && toplevel.wayland.appId ? toplevel.wayland.appId : String(ipc.class || "")
     return {
       appId: appId,
@@ -272,6 +305,11 @@ Panel {
     return entry && entry.icon ? root.themedIcon(entry.icon) : ""
   }
 
+  function resolvedIcon(name) {
+    var path = root.resolvedIcons[name]
+    return path ? "file://" + path : ""
+  }
+
   function isTerminalEntry(name) {
     if (!name) return false
     var entry = DesktopEntries.heuristicLookup(name)
@@ -284,11 +322,103 @@ Panel {
     return root.isTerminalEntry(info.appId) || root.isTerminalEntry(info.initialClass) || root.isTerminalEntry(info.initialTitle)
   }
 
-  function programIcon(name) {
-    if (!name || root.shells.indexOf(name) !== -1) return ""
-    var override = root.iconOverrides[name]
-    if (override) return root.themedIcon(String(override))
-    return root.entryIcon(name) || root.themedIcon(name)
+  function basename(path) {
+    var value = String(path || "")
+    return value.substring(value.lastIndexOf("/") + 1)
+  }
+
+  // ---- Desktop entries that launch web apps or terminal programs.
+
+  // The program a terminal launcher entry runs: `Terminal=true` entries run
+  // their command in a terminal; others pass it after `-e` (optionally
+  // wrapped in `bash -c "..."`).
+  function terminalProgramOf(entry) {
+    var command = entry.command ? Array.from(entry.command) : []
+    var program = ""
+    if (entry.runInTerminal) {
+      program = command[0] || ""
+    } else {
+      var e = command.indexOf("-e")
+      if (e === -1 || e + 1 >= command.length) return ""
+      program = command[e + 1]
+      if (root.shells.indexOf(root.basename(program)) !== -1 && command[e + 2] === "-c")
+        program = String(command[e + 3] || "").trim().split(/\s+/)[0]
+    }
+    program = root.basename(program)
+    return root.shells.indexOf(program) !== -1 ? "" : program
+  }
+
+  readonly property var launcherIndex: {
+    var webapps = []
+    var programs = {}
+    var entries = DesktopEntries.applications.values
+    for (var i = 0; i < entries.length; i++) {
+      var entry = entries[i]
+      if (!entry || !entry.icon) continue
+      var url = String(entry.execString || "").match(/(?:omarchy-launch-webapp\s+|--app=)["']?https?:\/\/([^\/\s"':?#]+)([^\s"'?#]*)/)
+      if (url) {
+        webapps.push({ host: url[1].replace(/^www\./, "").toLowerCase(), path: url[2] || "", icon: entry.icon })
+        continue
+      }
+      var program = root.terminalProgramOf(entry)
+      if (program && !programs[program]) programs[program] = entry.icon
+    }
+    return { webapps: webapps, programs: programs }
+  }
+
+  // Browser app windows (`--app=URL`) start with the site as their title
+  // ("discord.com_/channels/@me") or carry it in their class; match that to
+  // the web app entry with the same site, preferring the longest path.
+  function webappIcon(info) {
+    var title = info.initialTitle.toLowerCase().replace(/^www\./, "")
+    var appId = info.appId.toLowerCase()
+    if (title.indexOf(" ") !== -1 && appId.indexOf(".") === -1) return ""
+    var best = null
+    var bestScore = -1
+    var webapps = root.launcherIndex.webapps
+    for (var i = 0; i < webapps.length; i++) {
+      var app = webapps[i]
+      if (title.indexOf(app.host) !== 0 && appId.indexOf(app.host) === -1) continue
+      var path = app.path.toLowerCase()
+      var score = path && title.indexOf(app.host + "_" + path) === 0 ? path.length : 0
+      if (score > bestScore) {
+        best = app
+        bestScore = score
+      }
+    }
+    return best ? root.themedIcon(best.icon) : ""
+  }
+
+  // ---- Programs in terminals.
+
+  // Names to look a terminal program up by: its process name, and the name
+  // of its executable unless that is just an interpreter running it.
+  function programNames(program) {
+    if (!program || !program.name || root.shells.indexOf(program.name) !== -1) return []
+    var names = [program.name]
+    var exe = root.basename(program.exe)
+    if (exe && names.indexOf(exe) === -1 && root.interpreters.indexOf(exe) === -1) names.push(exe)
+    return names
+  }
+
+  function programIcon(program) {
+    var names = root.programNames(program)
+    var i
+    for (i = 0; i < names.length; i++) {
+      var override = root.iconOverrides[names[i]]
+      if (override) return root.themedIcon(String(override))
+    }
+    for (i = 0; i < names.length; i++) {
+      var launcher = root.launcherIndex.programs[names[i]]
+      var path = root.entryIcon(names[i]) || root.themedIcon(names[i])
+        || (launcher ? root.themedIcon(launcher) : "") || root.resolvedIcon(names[i])
+      if (path) return path
+    }
+    for (i = 0; i < names.length; i++) {
+      var glyph = Glyphs.forProgram(names[i])
+      if (glyph) return "glyph:" + glyph
+    }
+    return ""
   }
 
   function iconFor(info) {
@@ -300,11 +430,13 @@ Panel {
       if (program) return program
     }
 
-    var path = root.entryIcon(info.appId)
+    var path = root.webappIcon(info)
+      || root.entryIcon(info.appId)
       || root.themedIcon(info.appId)
       || root.themedIcon(info.appId.toLowerCase())
       || root.entryIcon(info.initialClass)
       || root.entryIcon(info.initialTitle)
+      || root.resolvedIcon(info.appId)
     return path || Quickshell.iconPath("application-x-executable", true)
   }
 
@@ -325,59 +457,119 @@ Panel {
     return icons
   }
 
-  function terminalPids() {
-    var pids = []
-    var values = Hyprland.toplevels.values
-    for (var i = 0; i < values.length; i++) {
-      var info = root.windowInfo(values[i])
-      if (info.pid > 0 && root.isTerminal(info)) pids.push(String(info.pid))
-    }
-    return pids
+  // ---- Polling windows and terminals, and resolving icons, in the background.
+
+  function refreshWindows() {
+    if (root.symbolMode || !root.showIcons || windowProbe.running) return
+    windowProbe.command = ["bash", "-c", root.probeScript]
+    windowProbe.running = true
   }
 
-  function refreshTerminalPrograms() {
-    if (root.symbolMode || !root.showIcons || !root.showTerminalPrograms || programProbe.running) return
-    var pids = root.terminalPids()
-    if (pids.length === 0) {
-      root.terminalPrograms = ({})
-      return
-    }
-    programProbe.command = ["bash", "-c", root.probeScript, "probe"].concat(pids)
-    programProbe.running = true
-  }
-
-  // For each terminal pid, print the foreground program on the terminal's tty.
-  readonly property string probeScript: 'for pid in "$@"; do\n'
-    + '  name=""\n'
+  // Prints the window list ("C <json>") and, for each window pid, the program
+  // in the foreground of the tty its first child runs on ("P pid name exe").
+  // For a terminal window that is the program running in the terminal.
+  readonly property string probeScript: 'clients=$(hyprctl clients -j 2>/dev/null) || exit 0\n'
+    + 'printf "C %s\\n" "$(jq -c \'map({a: (.address | ltrimstr("0x")), class, initialClass, initialTitle, pid})\' <<<"$clients")"\n'
+    + 'for pid in $(jq -r \'.[].pid\' <<<"$clients" | sort -u); do\n'
     + '  child=$(cat /proc/"$pid"/task/*/children 2>/dev/null | tr " " "\\n" | grep -m1 .)\n'
-    + '  if [ -n "$child" ] && stat=$(cat /proc/"$child"/stat 2>/dev/null); then\n'
-    + '    set -- ${stat##*) }\n'
-    + '    [ "${6:-0}" -gt 0 ] && name=$(cat /proc/"$6"/comm 2>/dev/null)\n'
-    + '  fi\n'
-    + '  echo "$pid $name"\n'
+    + '  [ -n "$child" ] && stat=$(cat /proc/"$child"/stat 2>/dev/null) || continue\n'
+    + '  set -- ${stat##*) }\n'
+    + '  [ "${6:-0}" -gt 0 ] || continue\n'
+    + '  name=$(cat /proc/"$6"/comm 2>/dev/null)\n'
+    + '  echo "P $pid ${name// /_} $(readlink /proc/"$6"/exe 2>/dev/null)"\n'
     + 'done\n'
 
   Process {
-    id: programProbe
+    id: windowProbe
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var clients = ({})
+        var programs = ({})
+        var lines = this.text.split("\n")
+        for (var i = 0; i < lines.length; i++) {
+          var line = lines[i]
+          if (line.indexOf("C ") === 0) {
+            var list = []
+            try { list = JSON.parse(line.substring(2)) } catch (e) {}
+            for (var j = 0; j < list.length; j++) clients[list[j].a] = list[j]
+          } else if (line.indexOf("P ") === 0) {
+            var parts = line.substring(2).split(" ")
+            programs[parts[0]] = { name: parts[1] || "", exe: parts.slice(2).join(" ") }
+          }
+        }
+        if (JSON.stringify(clients) !== JSON.stringify(root.clientInfo)) root.clientInfo = clients
+        if (JSON.stringify(programs) !== JSON.stringify(root.terminalPrograms)) root.terminalPrograms = programs
+        root.resolveMissingIcons()
+      }
+    }
+  }
+
+  // Pick up new windows right away instead of on the next poll.
+  Connections {
+    target: Hyprland
+    function onRawEvent(event) {
+      if (event.name === "openwindow" || event.name === "closewindow") windowEventDelay.restart()
+    }
+  }
+
+  Timer {
+    id: windowEventDelay
+    interval: 300
+    onTriggered: root.refreshWindows()
+  }
+
+  // Names that none of the quick lookups found an icon for and that
+  // scripts/resolve-icons has not been asked about yet.
+  function missingIconNames() {
+    var names = []
+    function want(name) {
+      if (name && !(name in root.resolvedIcons) && names.indexOf(name) === -1
+          && !root.entryIcon(name) && !root.themedIcon(name) && !root.launcherIndex.programs[name])
+        names.push(name)
+    }
+    var values = Hyprland.toplevels.values
+    for (var i = 0; i < values.length; i++) {
+      var info = root.windowInfo(values[i])
+      if (root.isTerminal(info)) {
+        var programNames = root.programNames(root.terminalPrograms[String(info.pid)])
+        for (var j = 0; j < programNames.length; j++) want(programNames[j])
+      } else if (!root.webappIcon(info)) {
+        want(info.appId)
+      }
+    }
+    return names
+  }
+
+  function resolveMissingIcons() {
+    if (iconResolver.running) return
+    var names = root.missingIconNames()
+    if (names.length === 0) return
+    iconResolver.command = [Qt.resolvedUrl("scripts/resolve-icons").toString().replace(/^file:\/\//, "")].concat(names)
+    iconResolver.running = true
+  }
+
+  Process {
+    id: iconResolver
     stdout: StdioCollector {
       onStreamFinished: {
         var next = ({})
+        for (var key in root.resolvedIcons) next[key] = root.resolvedIcons[key]
         var lines = this.text.split("\n")
         for (var i = 0; i < lines.length; i++) {
-          var parts = lines[i].trim().split(" ")
-          if (parts[0]) next[parts[0]] = parts.slice(1).join(" ")
+          var tab = lines[i].indexOf("\t")
+          if (tab > 0) next[lines[i].substring(0, tab)] = lines[i].substring(tab + 1)
         }
-        if (JSON.stringify(next) !== JSON.stringify(root.terminalPrograms)) root.terminalPrograms = next
+        root.resolvedIcons = next
       }
     }
   }
 
   Timer {
     interval: Math.max(1, Number(root.setting("terminalPollSeconds", 2))) * 1000
-    running: !root.symbolMode && root.showIcons && root.showTerminalPrograms
+    running: !root.symbolMode && root.showIcons
     repeat: true
     triggeredOnStart: true
-    onTriggered: root.refreshTerminalPrograms()
+    onTriggered: root.refreshWindows()
   }
 
   Component.onCompleted: Hyprland.refreshToplevels()
@@ -511,24 +703,45 @@ Panel {
   Component {
     id: appIcon
 
-    Image {
+    Item {
+      id: iconItem
       required property var modelData
+      // Glyph icons ("glyph:<char>") are Nerd Font characters from the bar font.
+      readonly property bool isGlyph: String(modelData.source).indexOf("glyph:") === 0
       anchors.verticalCenter: parent ? parent.verticalCenter : undefined
       width: root.iconSize
       height: root.iconSize
-      fillMode: Image.PreserveAspectFit
-      sourceSize.width: Math.round(root.iconSize * Screen.devicePixelRatio)
-      sourceSize.height: Math.round(root.iconSize * Screen.devicePixelRatio)
-      source: modelData.source
-      smooth: true
-      layer.enabled: !modelData.colored
-      // Tinted with a theme color, so they follow theme changes.
-      layer.effect: MultiEffect {
-        colorization: 1.0
-        colorizationColor: root.tintColor
+
+      Image {
+        visible: !iconItem.isGlyph
+        anchors.fill: parent
+        fillMode: Image.PreserveAspectFit
+        sourceSize.width: Math.round(root.iconSize * Screen.devicePixelRatio)
+        sourceSize.height: Math.round(root.iconSize * Screen.devicePixelRatio)
+        source: iconItem.isGlyph ? "" : iconItem.modelData.source
+        smooth: true
+        layer.enabled: !iconItem.modelData.colored
+        // Tinted with a theme color, so they follow theme changes.
+        layer.effect: MultiEffect {
+          colorization: 1.0
+          colorizationColor: root.tintColor
+        }
+      }
+
+      Text {
+        visible: iconItem.isGlyph
+        anchors.centerIn: parent
+        text: iconItem.isGlyph ? String(iconItem.modelData.source).substring(6) : ""
+        // Glyphs have no colors of their own: in color they take the theme's
+        // accent color, otherwise the tint.
+        color: iconItem.modelData.colored ? Color.accent : root.tintColor
+        font.family: root.bar ? root.bar.fontFamily : Style.font.family
+        font.pixelSize: root.iconSize
+        renderType: Text.NativeRendering
       }
     }
   }
+
 
   // ---- Settings popup.
 
@@ -635,7 +848,7 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(360))
+    contentWidth: panel.fittedContentWidth(Style.space(400))
     contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(640))
 
     PanelKeyCatcher {

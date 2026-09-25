@@ -1,0 +1,42 @@
+#!/bin/bash
+
+# Finds an icon already installed on this system for program or window-class
+# names that have no desktop entry or theme icon: /usr/share/pixmaps, then the
+# icons shipped by the package that owns the program. Read-only.
+# Prints one "name<TAB>path" line per name; path is empty when none is found.
+
+for name in "$@"; do
+  path=""
+
+  for ext in svg png; do
+    if [[ -f /usr/share/pixmaps/$name.$ext ]]; then
+      path="/usr/share/pixmaps/$name.$ext"
+      break
+    fi
+  done
+
+  if [[ -z $path ]] && command -v pacman >/dev/null && bin=$(command -v -- "$name" 2>/dev/null) && [[ $bin == /* ]]; then
+    bin=$(readlink -f -- "$bin")
+    if pkg=$(pacman -Qqo -- "$bin" 2>/dev/null); then
+      # Prefer an icon named after the program, then scalable, then the largest.
+      path=$(pacman -Qlq -- "$pkg" 2>/dev/null |
+        grep -E '^/usr/share/(icons/hicolor/[^/]+/apps|pixmaps)/[^/]+\.(svg|png)$' |
+        awk -v want="$name" '
+          {
+            score = 0
+            n = split($0, parts, "/")
+            for (i = 1; i <= n; i++) {
+              if (parts[i] == "scalable") score += 2000
+              else if (parts[i] ~ /^[0-9]+x[0-9]+$/) { split(parts[i], size, "x"); score += size[1] }
+            }
+            base = parts[n]
+            sub(/\.[^.]*$/, "", base)
+            if (base == want) score += 5000
+            if (score > best) { best = score; bestPath = $0 }
+          }
+          END { print bestPath }')
+    fi
+  fi
+
+  printf '%s\t%s\n' "$name" "$path"
+done
