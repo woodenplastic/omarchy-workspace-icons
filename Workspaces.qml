@@ -35,18 +35,13 @@ Panel {
   readonly property bool showNumbers: option("showNumbers", true) !== false
   readonly property bool showTerminalPrograms: option("showTerminalPrograms", true) !== false
   readonly property int maxIcons: Math.max(1, Number(option("maxIcons", 4)))
-  // Where the app icons sit around the workspace number: "left", "center" or "right".
-  readonly property string iconPosition: root.positionOption("iconPosition", "right")
+  // Which side of the workspace number the app icons sit on: "left" or "right".
+  readonly property string iconPosition: option("iconPosition", "right") === "left" ? "left" : "right"
   // Map a window class or terminal program name to a theme icon name or an
   // absolute image path, for apps without an icon of their own.
   readonly property var iconOverrides: option("iconOverrides", ({}))
 
   readonly property real iconSize: Math.round(Style.font.body * (smallIcons ? 0.9 : 1.15))
-
-  function positionOption(key, fallback) {
-    var value = String(option(key, fallback))
-    return ["left", "center", "right"].indexOf(value) !== -1 ? value : fallback
-  }
 
   readonly property string configScript: Qt.resolvedUrl("scripts/config").toString().replace(/^file:\/\//, "")
 
@@ -140,17 +135,21 @@ Panel {
     { key: "omarchyLogo", label: "Show Omarchy logo", description: "The Omarchy menu button on the bar. The menu hotkey keeps working." }
   ]
 
-  readonly property var choices: [
-    { key: "widgetSection", label: "Bar section" },
-    { key: "iconPosition", label: "Icon position" },
-    { key: "symbolPosition", label: "Grid symbol" }
-  ]
-
-  readonly property var positionOptions: [
+  readonly property var sectionOptions: [
     { value: "left", label: "Left" },
     { value: "center", label: "Center" },
     { value: "right", label: "Right" }
   ]
+
+  readonly property var choices: [
+    { key: "widgetSection", label: "Bar section", options: sectionOptions },
+    { key: "iconPosition", label: "Icon position", options: [{ value: "left", label: "Left" }, { value: "right", label: "Right" }] },
+    { key: "symbolPosition", label: "Grid symbol", options: sectionOptions }
+  ]
+
+  function choiceValues(choice) {
+    return choice.options.map(function(o) { return o.value })
+  }
 
   function toggleValue(key) {
     if (key === "showIcons") return root.showIcons
@@ -180,10 +179,10 @@ Panel {
   }
 
   // Step a choice left/right (keyboard), clamped to the ends.
-  function stepChoice(key, direction) {
-    var values = ["left", "center", "right"]
-    var next = values.indexOf(root.choiceValue(key)) + direction
-    if (next >= 0 && next < values.length) root.setChoice(key, values[next])
+  function stepChoice(choice, direction) {
+    var values = root.choiceValues(choice)
+    var next = values.indexOf(root.choiceValue(choice.key)) + direction
+    if (next >= 0 && next < values.length) root.setChoice(choice.key, values[next])
   }
 
   // ---- Workspaces.
@@ -420,9 +419,7 @@ Panel {
         readonly property bool occupied: workspace !== null && workspace.toplevels.values.length > 0
         readonly property bool focused: Hyprland.focusedWorkspace !== null && Hyprland.focusedWorkspace.id === modelData
         readonly property var icons: root.vertical ? [] : root.workspaceIcons(workspace)
-        // "center" splits the icons around the number.
-        readonly property int iconsBefore: root.iconPosition === "left" ? icons.length
-          : (root.iconPosition === "right" ? 0 : Math.floor(icons.length / 2))
+        readonly property int iconsBefore: root.iconPosition === "left" ? icons.length : 0
         // Workspaces with icons may drop their number; the focus mark and
         // empty workspaces always keep a label so every slot stays visible.
         readonly property string label: focused ? "󱓻"
@@ -508,10 +505,10 @@ Panel {
     var choice = root.choices[row - root.toggles.length]
     if (!choice) return
     if (direction !== 0) {
-      root.stepChoice(choice.key, direction)
+      root.stepChoice(choice, direction)
     } else {
-      // Enter cycles through the three values.
-      var values = ["left", "center", "right"]
+      // Enter cycles through the values.
+      var values = root.choiceValues(choice)
       root.setChoice(choice.key, values[(values.indexOf(root.choiceValue(choice.key)) + 1) % values.length])
     }
   }
@@ -621,11 +618,11 @@ Panel {
                 id: group
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                options: root.positionOptions
+                options: choiceRow.modelData.options
                 value: root.choiceValue(choiceRow.modelData.key)
                 focusable: false
                 cursorIndex: root.cursorIndex === choiceRow.row
-                  ? root.positionOptions.findIndex(function(o) { return o.value === group.value }) : -1
+                  ? root.choiceValues(choiceRow.modelData).indexOf(group.value) : -1
                 foreground: root.panelForeground
                 fontFamily: root.panelFont
                 fontSize: Style.font.bodySmall

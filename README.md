@@ -30,17 +30,16 @@ workspace) to open the settings:
 - **Show Omarchy logo** (hides the Omarchy menu button on the bar; the menu
   hotkey keeps working)
 
-And three left / center / right choices:
+And where things sit:
 
-- **Bar section**: which section of the bar the widget sits in
-- **Icon position**: icons before the number, split around it, or after it
+- **Bar section**: which section of the bar the widget sits in (left / center / right)
+- **Icon position**: icons left or right of the workspace number
 - **Grid symbol**: which section of the bar the grid symbol sits in. It starts
   in front of the workspaces; once moved, it is its own bar entry
   (`{"id": "woodenplastic.workspace-icons", "mode": "symbol"}`) and can sit in
   a different section from them
 
-Arrow keys or `j`/`k` move between rows, `h`/`l` change a left / center / right
-choice, Enter toggles, Esc closes.
+Arrow keys or `j`/`k` move between rows, `h`/`l` change a position, Enter toggles, Esc closes.
 
 ### Hotkey
 
