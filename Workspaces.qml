@@ -131,11 +131,12 @@ Panel {
   }
 
   readonly property var toggles: [
-    { key: "showIcons", label: "Show app icons", description: "An icon for each app open on a workspace." },
+    { key: "showIcons", label: "app icons", description: "An icon for each app open on a workspace." },
     { key: "smallIcons", label: "Small icons", description: "Smaller icons, closer to the text size." },
     { key: "coloredIcons", label: "Colored icons", description: "Off tints the icons in the theme's accent color." },
-    { key: "colorFocused", label: "Color the focused workspace", description: "With colored icons off, the focused workspace shows its icons in color instead of the focus mark." },
-    { key: "showNumbers", label: "Show numbers", description: "Off hides the number on workspaces that have icons." },
+    // Sub-option of Colored icons, shown only while that is off.
+    { key: "colorFocused", label: "Color the focused workspace", description: "Show its icons in color instead of the focus mark.", parentKey: "coloredIcons", shownWhen: false },
+    { key: "showNumbers", label: "Workspace numbers", description: "Off hides the number on workspaces that have icons." },
     { key: "omarchyLogo", label: "Show Omarchy logo", description: "The Omarchy menu button on the bar. The menu hotkey keeps working." }
   ]
 
@@ -163,6 +164,21 @@ Panel {
     if (key === "showNumbers") return root.showNumbers
     if (key === "omarchyLogo") return root.omarchyLogoShown
     return false
+  }
+
+  function rowVisible(row) {
+    var toggle = root.toggles[row]
+    return !toggle || !toggle.parentKey || root.toggleValue(toggle.parentKey) === toggle.shownWhen
+  }
+
+  // Move the keyboard cursor by one visible row.
+  function moveCursor(direction) {
+    var row = root.cursorIndex
+    do {
+      row += direction
+      if (row < 0 || row >= root.rowCount) return
+    } while (!root.rowVisible(row))
+    root.cursorIndex = row
   }
 
   function flipToggle(key) {
@@ -545,7 +561,7 @@ Panel {
       anchors.fill: parent
       onMoveRequested: function(dx, dy) {
         if (root.cursorIndex < 0) { root.cursorIndex = 0; return }
-        if (dy !== 0) root.cursorIndex = Math.max(0, Math.min(root.rowCount - 1, root.cursorIndex + dy))
+        if (dy !== 0) root.moveCursor(dy > 0 ? 1 : -1)
         else if (dx !== 0 && root.cursorIndex >= root.toggles.length) root.activateRow(root.cursorIndex, dx)
       }
       onActivateRequested: root.activateRow(root.cursorIndex, 0)
@@ -578,7 +594,10 @@ Panel {
             Toggle {
               required property var modelData
               required property int index
-              width: column.width
+              readonly property real indent: modelData.parentKey ? Style.space(24) : 0
+              visible: root.rowVisible(index)
+              x: indent
+              width: column.width - indent
               label: modelData.label
               description: modelData.description
               checked: root.toggleValue(modelData.key)
