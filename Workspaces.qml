@@ -18,6 +18,8 @@ Panel {
   // widget with `"mode": "symbol"`; that entry draws only the symbol.
   readonly property bool symbolMode: settings && settings.mode === "symbol"
   ipcTarget: symbolMode ? "" : "woodenplastic.workspace-icons"
+  // IPC is handled below so the tray icon can open the popup at its click.
+  manageIpc: false
 
   // ---- Settings. The workspaces entry owns them; the symbol entry reads
   //      them back from shell.json so its popup shows the same values.
@@ -564,11 +566,72 @@ Panel {
     cursorIndex = -1
     shellConfigFile.reload()
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+  } else {
+    anchorAtPoint = false
+  }
+
+  // ---- Opening at a screen point (the tray icon's click).
+
+  // The tray only tells its icon it was clicked, not where, so the tray helper
+  // sends the cursor position and the popup opens under a 1px anchor there.
+  property bool anchorAtPoint: false
+  readonly property var barWindow: root.QsWindow.window
+
+  Item {
+    id: pointAnchor
+    parent: root.barWindow ? root.barWindow.contentItem : root
+    width: 1
+    height: 1
+  }
+
+  function screenContains(item, x, y) {
+    var window = item && item.QsWindow ? item.QsWindow.window : null
+    var screen = window ? window.screen : null
+    return !!screen && x >= screen.x && x < screen.x + screen.width && y >= screen.y && y < screen.y + screen.height
+  }
+
+  function toggleAtPoint(x, y) {
+    if (root.opened) {
+      root.close()
+      return
+    }
+    var screen = root.barWindow ? root.barWindow.screen : null
+    pointAnchor.x = x - (screen ? screen.x : 0)
+    pointAnchor.y = y - (screen ? screen.y : 0)
+    root.anchorAtPoint = true
+    root.open()
+  }
+
+  // Route to the workspaces widget on the monitor under the point; there is
+  // one per monitor, but only one of them owns the IPC target.
+  function routeToggleAt(x, y) {
+    var widgets = root.bar ? root.bar.moduleWidgets(root.moduleName) : [root]
+    var target = root
+    for (var i = 0; i < widgets.length; i++) {
+      var widget = widgets[i]
+      if (widget && !widget.symbolMode && root.screenContains(widget, x, y)) {
+        target = widget
+        break
+      }
+    }
+    target.toggleAtPoint(x, y)
+  }
+
+  IpcHandler {
+    enabled: root.ipcTarget !== ""
+    target: root.ipcTarget
+
+    function open(): void { root.open() }
+    function close(): void { root.close() }
+    function show(): void { root.open() }
+    function hide(): void { root.close() }
+    function toggle(): void { root.toggle() }
+    function toggleAt(x: string, y: string): void { root.routeToggleAt(Number(x), Number(y)) }
   }
 
   KeyboardPanel {
     id: panel
-    anchorItem: root.showSymbol ? launcher : layout
+    anchorItem: root.anchorAtPoint ? pointAnchor : (root.showSymbol ? launcher : layout)
     owner: root
     bar: root.bar
     open: root.opened
