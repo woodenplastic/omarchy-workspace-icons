@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "id": "woodenplastic.workspace-icons",
+  "name": "Workspace Icons",
+  "version": "0.1.0",
+  "author": "Adrian Wild",
+  "license": "MIT",
+  "description": "Workspace number indicators that also show an icon for each app open on the workspace.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Workspaces.qml"
+  },
+  "barWidget": {
+    "displayName": "Workspace Icons",
+    "description": "Workspace numbers with the icons of the apps on each workspace.",
+    "category": "Compositor",
+    "aliases": [
+      "workspaces",
+      "workspace-apps"
+    ],
+    "allowMultiple": false,
+    "defaultSection": "left",
+    "defaults": {
+      "showIcons": true,
+      "maxIcons": 4
+    },
+    "schema": [
+      {
+        "key": "showIcons",
+        "type": "boolean",
+        "label": "Show app icons",
+        "defaultValue": true
+      },
+      {
+        "key": "maxIcons",
+        "type": "integer",
+        "label": "Icons per workspace",
+        "min": 1,
+        "max": 10,
+        "step": 1,
+        "defaultValue": 4,
+        "description": "One icon per distinct app, in window order."
+      }
+    ]
+  }
+}
