@@ -29,6 +29,8 @@ popup. There's nothing to edit by hand.
 - **Highlight the focused workspace in color.** With tinted icons, the
   workspace you're on can show its icons in full color instead of the usual
   focus mark.
+- **Adjustable icon opacity.** Fade the icons with a slider to keep the bar
+  calm, while the numbers stay fully visible.
 - **Numbers optional.** Hide the numbers on workspaces that have apps and let
   the icons speak. Put the icons left or right of the number.
 - **Put it anywhere.** Move the widget to the bar's left, center or right
@@ -87,6 +89,7 @@ workspaces, or by right-clicking any workspace.
 | Setting | What it does |
 |---|---|
 | **App icons** | Show an icon for each app open on a workspace. |
+| ↳ **Icon opacity** | Slider from 20 % to 100 %. Fades the icons; the numbers stay opaque. |
 | **Colored icons** | Show icons in their own colors. Turn off to tint them. |
 | ↳ **Tint** | Shown while colored icons are off. **Accent** tints icons and numbers in the theme's accent color, **Normal** in its text color. |
 | ↳ **Color the focused workspace** | Shown while colored icons are off. The focused workspace shows its icons in color instead of the focus mark. |
@@ -96,7 +99,7 @@ workspaces, or by right-clicking any workspace.
 | **Icon position** | Icons left or right of the workspace number. |
 | **Plugin symbol** | Where the settings button sits: left, center or right section of the bar, or **Tray**. |
 
-Keyboard: arrow keys or `j`/`k` move between rows, `h`/`l` change a choice,
+Keyboard: arrow keys or `j`/`k` move between rows, `h`/`l` change a choice or the slider,
 Enter toggles, Esc closes.
 
 ### Settings button in the tray

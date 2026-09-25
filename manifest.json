@@ -30,7 +30,8 @@
       "maxIcons": 4,
       "iconPosition": "right",
       "colorFocused": false,
-      "tintStyle": "accent"
+      "tintStyle": "accent",
+      "iconOpacity": 1
     },
     "schema": [
       {
@@ -38,6 +39,16 @@
         "type": "boolean",
         "label": "Show app icons",
         "defaultValue": true
+      },
+      {
+        "key": "iconOpacity",
+        "type": "number",
+        "label": "Icon opacity",
+        "min": 0.2,
+        "max": 1,
+        "step": 0.05,
+        "defaultValue": 1,
+        "description": "Opacity of the app icons; the numbers stay opaque."
       },
       {
         "key": "coloredIcons",

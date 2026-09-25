@@ -34,6 +34,11 @@ Panel {
 
   readonly property bool showIcons: option("showIcons", true) !== false
   readonly property bool coloredIcons: option("coloredIcons", true) !== false
+  // Opacity of the app icons (0.2 to 1); the numbers stay opaque.
+  readonly property real iconOpacity: Math.max(0.2, Math.min(1, Number(option("iconOpacity", 1)) || 1))
+  // Follows the slider while it is dragged, before the value is saved.
+  property real iconOpacityPreview: -1
+  readonly property real shownIconOpacity: iconOpacityPreview >= 0 ? iconOpacityPreview : iconOpacity
   // With tinted icons, mark the focused workspace by showing its icons in
   // full color instead of the focus mark.
   readonly property bool colorFocused: option("colorFocused", false) === true
@@ -155,6 +160,8 @@ Panel {
 
   readonly property var toggles: [
     { key: "showIcons", label: "App icons", description: "An icon for each app open on a workspace." },
+    // Sub-option of App icons, shown while icons are on.
+    { key: "iconOpacity", label: "Icon opacity", parentKey: "showIcons", shownWhen: true, slider: true },
     { key: "coloredIcons", label: "Colored icons", description: "Off tints the icons, see Tint below." },
     // Sub-option of Colored icons, shown only while that is off.
     { key: "tintStyle", label: "Tint", parentKey: "coloredIcons", shownWhen: false,
@@ -711,6 +718,7 @@ Panel {
       anchors.verticalCenter: parent ? parent.verticalCenter : undefined
       width: root.iconSize
       height: root.iconSize
+      opacity: root.shownIconOpacity
 
       Image {
         visible: !iconItem.isGlyph
@@ -758,13 +766,23 @@ Panel {
   readonly property string panelFont: bar ? bar.fontFamily : Style.font.family
 
   // Toggle rows that carry `options` are choices shown in the toggle list.
+  function setIconOpacity(value) {
+    root.iconOpacityPreview = -1
+    root.setSetting("iconOpacity", Math.round(Math.max(0.2, Math.min(1, value)) * 100) / 100)
+  }
+
+  // Rows that change with left/right: choices and sliders.
   function rowChoice(row) {
-    if (row < root.toggles.length) return root.toggles[row].options ? root.toggles[row] : null
+    if (row < root.toggles.length) return root.toggles[row].options || root.toggles[row].slider ? root.toggles[row] : null
     return root.choices[row - root.toggles.length] || null
   }
 
   function activateRow(row, direction) {
     if (row < 0) return
+    if (row < root.toggles.length && root.toggles[row].slider) {
+      if (direction !== 0) root.setIconOpacity(root.iconOpacity + direction * 0.05)
+      return
+    }
     if (row < root.toggles.length && !root.toggles[row].options) {
       root.flipToggle(root.toggles[row].key)
       return
@@ -909,15 +927,71 @@ Panel {
               required property var modelData
               required property int index
               readonly property bool isChoice: !!modelData.options
+              readonly property bool isSlider: !!modelData.slider
               readonly property real indent: modelData.parentKey ? Style.space(24) : 0
               visible: root.rowVisible(index)
               x: indent
               width: column.width - indent
-              implicitHeight: isChoice ? subChoice.implicitHeight : toggle.implicitHeight
+              implicitHeight: isSlider ? subSlider.implicitHeight : (isChoice ? subChoice.implicitHeight : toggle.implicitHeight)
+
+              Item {
+                id: subSlider
+                visible: toggleRow.isSlider
+                width: parent.width
+                implicitHeight: Math.max(sliderLabel.implicitHeight, Style.space(30))
+
+                Text {
+                  id: sliderLabel
+                  anchors.left: parent.left
+                  anchors.verticalCenter: parent.verticalCenter
+                  textFormat: Text.PlainText
+                  text: toggleRow.modelData.label
+                  color: root.panelForeground
+                  font.family: root.panelFont
+                  font.pixelSize: Style.font.body
+                }
+
+                PanelSlider {
+                  id: opacitySlider
+                  bar: root.bar
+                  anchors.left: sliderLabel.right
+                  anchors.leftMargin: Style.space(16)
+                  anchors.right: sliderValue.left
+                  anchors.rightMargin: Style.space(12)
+                  anchors.verticalCenter: parent.verticalCenter
+                  minimum: 0.2
+                  maximum: 1
+                  step: 0.05
+                  value: root.iconOpacity
+                  opacity: root.cursorIndex === toggleRow.index || dragging ? 1 : 0.85
+                  onMoved: function(v) { root.iconOpacityPreview = v }
+                  onReleased: function(v) { root.setIconOpacity(v) }
+                }
+
+                Text {
+                  id: sliderValue
+                  anchors.right: parent.right
+                  anchors.verticalCenter: parent.verticalCenter
+                  width: Style.space(44)
+                  horizontalAlignment: Text.AlignRight
+                  textFormat: Text.PlainText
+                  text: Math.round(root.shownIconOpacity * 100) + "%"
+                  color: root.panelForeground
+                  font.family: root.panelFont
+                  font.pixelSize: Style.font.body
+                }
+
+                MouseArea {
+                  anchors.fill: parent
+                  acceptedButtons: Qt.NoButton
+                  hoverEnabled: true
+                  onEntered: root.cursorIndex = toggleRow.index
+                }
+              }
 
               Toggle {
                 id: toggle
-                visible: !toggleRow.isChoice
+                visible: !toggleRow.isChoice && !toggleRow.isSlider
                 width: parent.width
                 label: toggleRow.modelData.label
                 description: toggleRow.modelData.description || ""
@@ -931,7 +1005,7 @@ Panel {
 
               Item {
                 id: subChoice
-                visible: toggleRow.isChoice
+                visible: toggleRow.isChoice && !toggleRow.isSlider
                 width: parent.width
                 implicitHeight: Math.max(subLabel.implicitHeight, subGroup.implicitHeight)
 
