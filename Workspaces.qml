@@ -746,9 +746,8 @@ Panel {
         visible: iconItem.isGlyph
         anchors.centerIn: parent
         text: iconItem.isGlyph ? String(iconItem.modelData.source).substring(6) : ""
-        // Glyphs have no colors of their own: in color they take the theme's
-        // accent color, otherwise the tint.
-        color: iconItem.modelData.colored ? Color.accent : root.tintColor
+        // Glyphs have no colors of their own: the bar's text color, or the tint.
+        color: iconItem.modelData.colored ? root.symbolColor : root.tintColor
         font.family: root.bar ? root.bar.fontFamily : Style.font.family
         font.pixelSize: root.iconSize
         renderType: Text.NativeRendering

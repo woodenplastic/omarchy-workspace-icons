@@ -167,7 +167,7 @@ installed on your computer, so it covers the apps you actually use:
    kubectl, pacman/yay/paru and more). Others get a glyph for their kind:
    a robot for AI agents like `claude` or `codex`, a gauge for system
    monitors, a folder for file managers, a split pane for `tmux`/`zellij`,
-   and so on. The glyphs take your theme's accent color, or your tint.
+   and so on. The glyphs take the bar's text color, or your tint.
 7. A generic app icon, or the terminal icon for a plain shell.
 
 To give an app or program a specific icon, map it in `iconOverrides`
