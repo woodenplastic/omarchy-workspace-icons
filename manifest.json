@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "woodenplastic.workspace-icons",
   "name": "Workspace Icons",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "Adrian Wild",
   "license": "MIT",
   "description": "Workspace number indicators that also show an icon for each app open on the workspace, including the program running inside terminals.",
@@ -24,8 +24,11 @@
     "defaultSection": "left",
     "defaults": {
       "showIcons": true,
-      "maxIcons": 4,
-      "showTerminalPrograms": true
+      "smallIcons": false,
+      "coloredIcons": true,
+      "showNumbers": true,
+      "showTerminalPrograms": true,
+      "maxIcons": 4
     },
     "schema": [
       {
@@ -33,6 +36,33 @@
         "type": "boolean",
         "label": "Show app icons",
         "defaultValue": true
+      },
+      {
+        "key": "smallIcons",
+        "type": "boolean",
+        "label": "Small icons",
+        "defaultValue": false
+      },
+      {
+        "key": "coloredIcons",
+        "type": "boolean",
+        "label": "Colored icons",
+        "defaultValue": true,
+        "description": "Off shows the icons in greyscale."
+      },
+      {
+        "key": "showNumbers",
+        "type": "boolean",
+        "label": "Show numbers",
+        "defaultValue": true,
+        "description": "Off hides the number on workspaces that have icons."
+      },
+      {
+        "key": "showTerminalPrograms",
+        "type": "boolean",
+        "label": "Show programs in terminals",
+        "defaultValue": true,
+        "description": "Show the icon of the program running in a terminal (e.g. nvim, btop) instead of the terminal icon."
       },
       {
         "key": "maxIcons",
@@ -43,13 +73,6 @@
         "step": 1,
         "defaultValue": 4,
         "description": "One icon per distinct app, in window order."
-      },
-      {
-        "key": "showTerminalPrograms",
-        "type": "boolean",
-        "label": "Show programs in terminals",
-        "defaultValue": true,
-        "description": "Show the icon of the program running in a terminal (e.g. nvim, btop) instead of the terminal icon."
       }
     ]
   }

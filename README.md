@@ -11,25 +11,43 @@ also shows an icon for each app open on a workspace.
 omarchy plugin add https://github.com/woodenplastic/omarchy-workspace-icons
 ```
 
-Then swap the stock widget for this one in `~/.config/omarchy/shell.json`:
+Say yes to enabling it and pick a bar section (left, center or right). Then
+remove the stock `omarchy.workspaces` widget so you don't have two:
 
-```json
-"left": [
-  { "id": "omarchy.menu" },
-  { "id": "woodenplastic.workspace-icons" }
-]
+```bash
+omarchy plugin disable omarchy.workspaces
 ```
 
 ## Settings
 
-| Key             | Default | Description                                         |
-|-----------------|---------|-----------------------------------------------------|
-| `showIcons`     | `true`  | Show app icons next to the workspace numbers.       |
-| `maxIcons`      | `4`     | Maximum icons per workspace (one per distinct app). |
-| `iconScale`     | `1.15`  | Icon size relative to the bar font size.            |
-| `showTerminalPrograms` | `true` | Show the program running in a terminal instead of the terminal icon. |
-| `terminalPollSeconds`  | `2`    | How often to check what runs in terminals.          |
-| `iconOverrides` | `{}`    | Window class or program name → icon name or absolute image path. |
+Click the grid symbol in front of the workspaces (or right click any
+workspace) to open the settings:
+
+- **Show app icons**
+- **Small icons**
+- **Colored icons** (off shows greyscale icons)
+- **Show numbers** (off hides the number on workspaces that have icons)
+
+Arrow keys or `j`/`k` move between options, Enter toggles, Esc closes.
+
+### Hotkey
+
+Open the settings from a key binding in `~/.config/hypr/bindings.lua`:
+
+```lua
+o.bind("SUPER + ALT + W", "Workspace Icons settings", "omarchy-shell woodenplastic.workspace-icons toggle")
+```
+
+### More options
+
+These are set inline on the widget's entry in `~/.config/omarchy/shell.json`:
+
+| Key                    | Default | Description                                          |
+|------------------------|---------|------------------------------------------------------|
+| `maxIcons`             | `4`     | Maximum icons per workspace (one per distinct app).  |
+| `showTerminalPrograms` | `true`  | Show the program running in a terminal instead of the terminal icon. |
+| `terminalPollSeconds`  | `2`     | How often to check what runs in terminals.           |
+| `iconOverrides`        | `{}`    | Window class or program name → icon name or absolute image path. |
 
 Icons are looked up from the app's desktop entry, then the icon theme. Apps
 without either show a generic icon; give them one with `iconOverrides`:
