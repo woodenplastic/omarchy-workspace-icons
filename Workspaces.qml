@@ -611,7 +611,7 @@ Panel {
       tooltipText: "Workspace Icons settings"
       fixedWidth: root.vertical ? root.barSize : Style.space(22)
       fixedHeight: root.barSize
-      onPressed: function() { root.toggle() }
+      onPressed: function() { root.toggleHere() }
 
       // 2x2 workspace grid, the first cell filled as the "current" one.
       Grid {
@@ -666,7 +666,7 @@ Panel {
         fixedWidth: root.vertical ? root.barSize : Math.max(Style.space(20), content.implicitWidth + Style.spaceReal(6) * 2)
         fixedHeight: root.barSize
         onPressed: function(mouseButton) {
-          if (mouseButton === Qt.RightButton) root.toggle()
+          if (mouseButton === Qt.RightButton) root.toggleHere()
           else root.focusWorkspace(modelData)
         }
 
@@ -784,15 +784,27 @@ Panel {
     cursorIndex = -1
     shellConfigFile.reload()
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
-  } else {
-    anchorAtPoint = false
   }
 
   // ---- Opening at a screen point (the tray icon's click).
 
   // The tray only tells its icon it was clicked, not where, so the tray helper
   // sends the cursor position and the popup opens under a 1px anchor there.
+  // Chosen when the popup opens and kept while it closes, so its close
+  // animation stays where it was opened.
   property bool anchorAtPoint: false
+
+  // Open or toggle the popup under the widget (settings button, right click,
+  // hotkey) rather than at a point.
+  function openHere() {
+    if (!root.opened) root.anchorAtPoint = false
+    root.open()
+  }
+
+  function toggleHere() {
+    if (root.opened) root.close()
+    else root.openHere()
+  }
   readonly property var barWindow: root.QsWindow.window
 
   Item {
@@ -839,11 +851,11 @@ Panel {
     enabled: root.ipcTarget !== ""
     target: root.ipcTarget
 
-    function open(): void { root.open() }
+    function open(): void { root.openHere() }
     function close(): void { root.close() }
-    function show(): void { root.open() }
+    function show(): void { root.openHere() }
     function hide(): void { root.close() }
-    function toggle(): void { root.toggle() }
+    function toggle(): void { root.toggleHere() }
     function toggleAt(x: string, y: string): void { root.routeToggleAt(Number(x), Number(y)) }
   }
 
