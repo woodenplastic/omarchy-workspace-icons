@@ -53,6 +53,11 @@ on 1 and 6 show what runs in them: `herdr` (a terminal multiplexer) and
 
 ![Catppuccin Latte with accent tint](screenshots/catppuccin-latte-accent.png)
 
+**Nord:** numbers hidden on workspaces with apps, and the focused workspace
+(2) shows its icon in full color among the tinted ones.
+
+![Nord with numbers hidden and the focused workspace in color](screenshots/nord-no-numbers-focused.png)
+
 **Gruvbox:** icons tinted in the theme's normal text color, numbers hidden on
 workspaces with apps.
 
