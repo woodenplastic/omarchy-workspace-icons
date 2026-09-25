@@ -721,8 +721,14 @@ Panel {
         source: iconItem.isGlyph ? "" : iconItem.modelData.source
         smooth: true
         layer.enabled: !iconItem.modelData.colored
+        // Render the tint at physical pixels; the default logical-size layer
+        // blurs icons on scaled displays.
+        layer.textureSize: Qt.size(Math.round(width * Screen.devicePixelRatio), Math.round(height * Screen.devicePixelRatio))
+        layer.smooth: true
         // Tinted with a theme color, so they follow theme changes.
         layer.effect: MultiEffect {
+          // Lifted so icons come out close to the tint color instead of darker.
+          brightness: 0.6
           colorization: 1.0
           colorizationColor: root.tintColor
         }
