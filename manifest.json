@@ -5,7 +5,7 @@
   "version": "1.2.0",
   "author": "Adrian Wild",
   "license": "MIT",
-  "description": "Set up your Omarchy workspace bar the way you like it, without touching a config file. Many new Omarchy users struggle to get their top bar and workspaces right. Workspace Icons puts every option in one settings popup: a click on the bar, a right-click on a workspace for that workspace's own settings. Each workspace shows the icons of the apps on it, so you see at a glance what runs where. That includes programs in terminals (nvim, lazygit, claude, tmux, ...), web apps like Discord or WhatsApp, and Steam games. Hover a workspace for a preview of its windows, click an icon to jump to its window, scroll to switch, and give workspaces names. Pick classic numbers or animated dots with a pill for the one you're on, and colored icons or icons tinted in your theme's colors. It works across multiple monitors, highlights windows that want attention and shows the scratchpad. Swaps in and out for the stock widget automatically.",
+  "description": "Set up your Omarchy workspace bar without touching a config file. Many new Omarchy users struggle to get their top bar and workspaces right; here everything is in one settings popup. Each workspace shows the icons of its apps, including programs in terminals (nvim, claude, tmux) and web apps. Hover to peek at a workspace, click a window to jump to it. Classic, tiles or dots, theme tints, settings per workspace, multi-monitor aware. Swaps in for the stock widget automatically.",
   "kinds": [
     "bar-widget"
   ],
