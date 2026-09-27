@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "woodenplastic.workspace-icons",
   "name": "Workspace Icons",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "Adrian Wild",
   "license": "MIT",
-  "description": "Replaces Omarchy's workspace numbers with numbers plus the icons of the apps on each workspace, so you see at a glance what runs where. Recognizes programs in terminals (nvim, lazygit, claude, tmux, ...) and web apps like Discord or WhatsApp. Keep icons in color or tint them in your theme's accent or text color, with the focused workspace highlighted. Move it to any bar section, settings on the bar or in the tray. Swaps in and out for the stock widget automatically.",
+  "description": "Set up your Omarchy workspace bar the way you like it, without touching a config file. Many new Omarchy users struggle to get their top bar and workspaces right. Workspace Icons puts every option in one settings popup: a click on the bar, a right-click on a workspace for that workspace's own settings. Each workspace shows the icons of the apps on it, so you see at a glance what runs where. That includes programs in terminals (nvim, lazygit, claude, tmux, ...), web apps like Discord or WhatsApp, and Steam games. Hover a workspace for a preview of its windows, click an icon to jump to its window, scroll to switch, and give workspaces names. Pick classic numbers or animated dots with a pill for the one you're on, and colored icons or icons tinted in your theme's colors. It works across multiple monitors, highlights windows that want attention and shows the scratchpad. Swaps in and out for the stock widget automatically.",
   "kinds": [
     "bar-widget"
   ],
@@ -14,7 +14,7 @@
   },
   "barWidget": {
     "displayName": "Workspace Icons",
-    "description": "Workspace numbers with the icons of the apps on each workspace, themed tints and a settings popup.",
+    "description": "Workspace numbers or dots with the icons of the apps on each workspace, hover previews and one settings popup for everything.",
     "category": "Compositor",
     "aliases": [
       "workspaces",
@@ -33,9 +33,69 @@
       "iconPosition": "right",
       "colorFocused": false,
       "tintStyle": "accent",
-      "iconOpacity": 1
+      "iconOpacity": 1,
+      "showCounts": true,
+      "showUrgent": true,
+      "grayscaleUnfocused": false,
+      "hideEmpty": false,
+      "perMonitor": false,
+      "clickSummons": false,
+      "showSpecial": true,
+      "scrollSwitch": true,
+      "scrollWrap": true,
+      "animations": true,
+      "previewLive": false,
+      "previewPrivacy": true,
+      "barStyle": "classic",
+      "pillContent": "icons",
+      "pillFrame": true,
+      "activeTile": "subtle"
     },
     "schema": [
+      {
+        "key": "barStyle",
+        "type": "enum",
+        "label": "Style",
+        "options": [
+          "classic",
+          "tiles",
+          "dots"
+        ],
+        "defaultValue": "classic",
+        "description": "Classic: numbers with the app icons beside them. Tiles: the same on a rounded tile per workspace. Dots: a dot per workspace, the focused one a pill with its icons."
+      },
+      {
+        "key": "activeTile",
+        "type": "enum",
+        "label": "Active tile",
+        "options": [
+          "subtle",
+          "solid",
+          "accent"
+        ],
+        "defaultValue": "subtle",
+        "description": "With the tiles style: the tile of the workspace you're on, brighter (subtle), in the bar's text color (solid) or in the accent color."
+      },
+      {
+        "key": "pillContent",
+        "type": "enum",
+        "label": "Focused pill",
+        "options": [
+          "icons",
+          "number",
+          "both",
+          "none"
+        ],
+        "defaultValue": "icons",
+        "description": "With the dots style: what the focused workspace's pill carries; none leaves a plain pill."
+      },
+      {
+        "key": "pillFrame",
+        "type": "boolean",
+        "label": "Pill frame",
+        "defaultValue": true,
+        "description": "With the dots style: the filled or outlined shape around the focused workspace's icons and number. Off shows them on the bar itself."
+      },
       {
         "key": "showIcons",
         "type": "boolean",
@@ -58,6 +118,13 @@
         "label": "Colored icons",
         "defaultValue": true,
         "description": "Off tints the icons, see Tint."
+      },
+      {
+        "key": "grayscaleUnfocused",
+        "type": "boolean",
+        "label": "Gray out other workspaces",
+        "defaultValue": false,
+        "description": "With colored icons, only the focused workspace's icons are in color."
       },
       {
         "key": "tintStyle",
@@ -92,6 +159,20 @@
         "description": "Hover a workspace to see its windows."
       },
       {
+        "key": "previewLive",
+        "type": "boolean",
+        "label": "Live preview",
+        "defaultValue": false,
+        "description": "Windows in the preview keep updating while it is open."
+      },
+      {
+        "key": "previewPrivacy",
+        "type": "boolean",
+        "label": "Hide preview while screen sharing",
+        "defaultValue": true,
+        "description": "No previews while the screen is shared or recorded."
+      },
+      {
         "key": "workspaceCount",
         "type": "integer",
         "label": "Workspaces shown",
@@ -100,6 +181,54 @@
         "step": 1,
         "defaultValue": 5,
         "description": "Workspaces shown even when empty; workspaces with windows past this number show too."
+      },
+      {
+        "key": "hideEmpty",
+        "type": "boolean",
+        "label": "Hide empty workspaces",
+        "defaultValue": false,
+        "description": "Only workspaces with windows, and the one each monitor shows."
+      },
+      {
+        "key": "perMonitor",
+        "type": "boolean",
+        "label": "Only this monitor's workspaces",
+        "defaultValue": false,
+        "description": "Each bar lists the workspaces on its own monitor."
+      },
+      {
+        "key": "clickSummons",
+        "type": "boolean",
+        "label": "Bring workspaces to this monitor",
+        "defaultValue": false,
+        "description": "Clicking a workspace moves it to the monitor of the bar you clicked."
+      },
+      {
+        "key": "showSpecial",
+        "type": "boolean",
+        "label": "Special workspaces",
+        "defaultValue": true,
+        "description": "The scratchpad and other special workspaces, while they hold windows."
+      },
+      {
+        "key": "scrollSwitch",
+        "type": "boolean",
+        "label": "Scroll to switch",
+        "defaultValue": true,
+        "description": "The mouse wheel over the workspaces moves between them."
+      },
+      {
+        "key": "scrollWrap",
+        "type": "boolean",
+        "label": "Scroll wraps around",
+        "defaultValue": true,
+        "description": "Scrolling past the last workspace goes back to the first."
+      },
+      {
+        "key": "animations",
+        "type": "boolean",
+        "label": "Animations",
+        "defaultValue": true
       },
       {
         "key": "iconPosition",
@@ -128,6 +257,20 @@
         "step": 1,
         "defaultValue": 4,
         "description": "One icon per distinct app, in window order."
+      },
+      {
+        "key": "showCounts",
+        "type": "boolean",
+        "label": "Window counts",
+        "defaultValue": true,
+        "description": "A number on apps with several windows on a workspace."
+      },
+      {
+        "key": "showUrgent",
+        "type": "boolean",
+        "label": "Highlight urgent windows",
+        "defaultValue": true,
+        "description": "Pulse workspaces whose apps want attention, with a dot on the app."
       }
     ]
   },
