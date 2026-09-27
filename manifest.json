@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "woodenplastic.workspace-icons",
   "name": "Workspace Icons",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "author": "Adrian Wild",
   "license": "MIT",
   "description": "Set up your Omarchy workspace bar without touching a config file. Many new Omarchy users struggle to get their top bar and workspaces right; here everything is in one settings popup. Each workspace shows the icons of its apps, including programs in terminals (nvim, claude, tmux) and web apps. Hover to peek at a workspace, click a window to jump to it. Classic, tiles or dots, theme tints, settings per workspace, multi-monitor aware. Swaps in for the stock widget automatically.",
@@ -276,5 +276,9 @@
   },
   "omarchy": {
     "clonedFrom": "omarchy.workspaces"
+  },
+  "deskTile": {
+    "supported": false,
+    "message": "Workspace Icons belongs on the bar: its workspaces and windows are already up there."
   }
 }
