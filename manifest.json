@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "woodenplastic.workspace-icons",
   "name": "Workspace Icons",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "Adrian Wild",
   "license": "MIT",
   "description": "Replaces Omarchy's workspace numbers with numbers plus the icons of the apps on each workspace, so you see at a glance what runs where. Recognizes programs in terminals (nvim, lazygit, claude, tmux, ...) and web apps like Discord or WhatsApp. Keep icons in color or tint them in your theme's accent or text color, with the focused workspace highlighted. Move it to any bar section, settings on the bar or in the tray. Swaps in and out for the stock widget automatically.",
