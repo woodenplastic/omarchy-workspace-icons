@@ -27,6 +27,8 @@
       "coloredIcons": true,
       "showNumbers": true,
       "showTerminalPrograms": true,
+      "showPreview": true,
+      "workspaceCount": 5,
       "maxIcons": 4,
       "iconPosition": "right",
       "colorFocused": false,
@@ -81,6 +83,23 @@
         "label": "Workspace numbers",
         "defaultValue": true,
         "description": "Hides the number on workspaces that have icons."
+      },
+      {
+        "key": "showPreview",
+        "type": "boolean",
+        "label": "Workspace preview",
+        "defaultValue": true,
+        "description": "Hover a workspace to see its windows."
+      },
+      {
+        "key": "workspaceCount",
+        "type": "integer",
+        "label": "Workspaces shown",
+        "min": 1,
+        "max": 10,
+        "step": 1,
+        "defaultValue": 5,
+        "description": "Workspaces shown even when empty; workspaces with windows past this number show too."
       },
       {
         "key": "iconPosition",

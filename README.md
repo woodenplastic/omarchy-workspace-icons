@@ -31,6 +31,12 @@ popup. There's nothing to edit by hand.
   focus mark.
 - **Adjustable icon opacity.** Fade the icons with a slider to keep the bar
   calm, while the numbers stay fully visible.
+- **Workspace preview on hover.** Rest the pointer on a workspace to see a
+  miniature of it: its windows where they sit on the monitor, captured from
+  the windows themselves.
+- **As many workspaces as you use.** Choose how many workspaces the bar
+  always shows, from 1 to 10, even when they're empty. Workspaces with
+  windows past that number show up too.
 - **Numbers optional.** Hide the numbers on workspaces that have apps and let
   the icons speak. Put the icons left or right of the number.
 - **Put it anywhere.** Move the widget to the bar's left, center or right

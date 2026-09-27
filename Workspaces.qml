@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
+import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 import "Glyphs.js" as Glyphs
@@ -36,9 +37,13 @@ Panel {
   readonly property bool coloredIcons: option("coloredIcons", true) !== false
   // Opacity of the app icons (0.2 to 1); the numbers stay opaque.
   readonly property real iconOpacity: Math.max(0.2, Math.min(1, Number(option("iconOpacity", 1)) || 1))
-  // Follows the slider while it is dragged, before the value is saved.
-  property real iconOpacityPreview: -1
-  readonly property real shownIconOpacity: iconOpacityPreview >= 0 ? iconOpacityPreview : iconOpacity
+  readonly property real shownIconOpacity: shownSliderValue("iconOpacity")
+  // Workspaces shown even when empty (1 to 10); occupied ones past that show too.
+  readonly property int workspaceCount: Math.max(1, Math.min(10, Math.round(Number(option("workspaceCount", 5)) || 5)))
+  readonly property int shownWorkspaceCount: Math.round(shownSliderValue("workspaceCount"))
+  // Slider key -> value while its slider is dragged, before the value is
+  // saved, so the bar follows the drag.
+  property var sliderPreview: ({})
   // With tinted icons, mark the focused workspace by showing its icons in
   // full color instead of the focus mark.
   readonly property bool colorFocused: option("colorFocused", false) === true
@@ -48,6 +53,8 @@ Panel {
   readonly property color tintColor: tintStyle === "accent" ? Color.accent : symbolColor
   readonly property bool showNumbers: option("showNumbers", true) !== false
   readonly property bool showTerminalPrograms: option("showTerminalPrograms", true) !== false
+  // A preview of the workspace's windows while the pointer rests on it.
+  readonly property bool showPreview: option("showPreview", true) !== false
   readonly property int maxIcons: Math.max(1, Number(option("maxIcons", 4)))
   // Which side of the workspace number the app icons sit on: "left" or "right".
   readonly property string iconPosition: option("iconPosition", "right") === "left" ? "left" : "right"
@@ -161,13 +168,16 @@ Panel {
   readonly property var toggles: [
     { key: "showIcons", label: "App icons", description: "An icon for each app open on a workspace." },
     // Sub-option of App icons, shown while icons are on.
-    { key: "iconOpacity", label: "Icon opacity", parentKey: "showIcons", shownWhen: true, slider: true },
+    { key: "iconOpacity", label: "Icon opacity", parentKey: "showIcons", shownWhen: true, slider: true, min: 0.2, max: 1, step: 0.05, percent: true },
     { key: "coloredIcons", label: "Colored icons", description: "Off tints the icons, see Tint below." },
     // Sub-option of Colored icons, shown only while that is off.
     { key: "tintStyle", label: "Tint", parentKey: "coloredIcons", shownWhen: false,
       options: [{ value: "accent", label: "Accent" }, { value: "normal", label: "Normal" }] },
     { key: "colorFocused", label: "Color the focused workspace", description: "Show its icons in color instead of the focus mark.", parentKey: "coloredIcons", shownWhen: false },
     { key: "showNumbers", label: "Workspace numbers", description: "Hides the number on workspaces that have icons." },
+    { key: "showPreview", label: "Workspace preview", description: "Hover a workspace to see its windows." },
+    // Shown even when empty; workspaces with windows past it show too.
+    { key: "workspaceCount", label: "Workspaces shown", slider: true, min: 1, max: 10, step: 1 },
     { key: "omarchyLogo", label: "Show Omarchy logo", description: "The Omarchy menu button on the bar. The menu hotkey keeps working." }
   ]
 
@@ -192,6 +202,7 @@ Panel {
     if (key === "coloredIcons") return root.coloredIcons
     if (key === "colorFocused") return root.colorFocused
     if (key === "showNumbers") return root.showNumbers
+    if (key === "showPreview") return root.showPreview
     if (key === "omarchyLogo") return root.omarchyLogoShown
     return false
   }
@@ -249,7 +260,8 @@ Panel {
   }
 
   function workspaceIds() {
-    var ids = [1, 2, 3, 4, 5]
+    var ids = []
+    for (var n = 1; n <= root.shownWorkspaceCount; n++) ids.push(n)
     var values = Hyprland.workspaces.values
 
     for (var i = 0; i < values.length; i++) {
@@ -680,7 +692,9 @@ Panel {
         verticalPadding: 6
         fixedWidth: root.vertical ? root.barSize : Math.max(Style.space(20), content.implicitWidth + Style.spaceReal(6) * 2)
         fixedHeight: root.barSize
+        onTooltipHoveredChanged: root.hoverWorkspace(button, modelData, tooltipHovered)
         onPressed: function(mouseButton) {
+          root.closePreview()
           if (mouseButton === Qt.RightButton) root.toggleHere()
           else root.focusWorkspace(modelData)
         }
@@ -763,6 +777,218 @@ Panel {
     }
   }
 
+  // ---- Workspace preview.
+  //
+  // Resting the pointer on a workspace shows its windows where they sit on
+  // the monitor, each as a still capture of the window. A window shows its
+  // app icon until its capture arrives, or when the compositor gives none.
+
+  // Workspace button under the pointer and its workspace id.
+  property Item previewHoverButton: null
+  property int previewHoverId: -1
+  property Item previewAnchor: null
+  property bool previewOpen: false
+  // Windows of the previewed workspace, back to front: { toplevel, x, y,
+  // width, height } in preview pixels.
+  property var previewWindows: []
+  property size previewSize: Qt.size(0, 0)
+  readonly property real previewMaxSize: Style.space(360)
+
+  function canPreview() {
+    return root.showPreview && !root.symbolMode && !root.opened
+      && !(root.bar && root.bar.activePopout)
+  }
+
+  function hoverWorkspace(button, id, hovered) {
+    if (hovered) {
+      root.previewHoverButton = button
+      root.previewHoverId = id
+      previewCloseDelay.stop()
+      // With a preview already up, follow the pointer without waiting again.
+      if (root.previewOpen) root.probePreview()
+      else previewOpenDelay.restart()
+    } else if (root.previewHoverButton === button) {
+      root.previewHoverButton = null
+      root.previewHoverId = -1
+      previewOpenDelay.stop()
+      previewCloseDelay.restart()
+    }
+  }
+
+  function closePreview() {
+    previewOpenDelay.stop()
+    previewCloseDelay.stop()
+    root.previewHoverButton = null
+    root.previewHoverId = -1
+    root.previewOpen = false
+  }
+
+  Timer {
+    id: previewOpenDelay
+    interval: 400
+    onTriggered: root.probePreview()
+  }
+
+  Timer {
+    id: previewCloseDelay
+    interval: 120
+    onTriggered: root.previewOpen = false
+  }
+
+  function probePreview() {
+    var workspace = root.workspaceById(root.previewHoverId)
+    if (!root.canPreview() || !workspace || workspace.toplevels.values.length === 0) {
+      root.previewOpen = false
+      return
+    }
+    // A probe still running for another workspace starts the next one when it ends.
+    if (previewProbe.running) return
+    previewProbe.workspaceId = root.previewHoverId
+    previewProbe.command = ["bash", "-c", root.previewProbeScript, "preview", String(root.previewHoverId)]
+    previewProbe.running = true
+  }
+
+  // Prints the workspace's visible windows and the monitors, one JSON line each.
+  readonly property string previewProbeScript: 'hyprctl clients -j | jq -c --argjson ws "$1" \'map(select(.workspace.id == $ws and .mapped != false and .hidden != true)'
+    + ' | {a: (.address | ltrimstr("0x")), at, size, monitor, floating, fullscreen, focusHistoryID})\'\n'
+    + 'hyprctl monitors -j | jq -c \'map({id, x, y, width, height, scale, transform})\'\n'
+
+  // Places the windows on a miniature of their monitor; false when there is
+  // nothing to show.
+  function layoutPreview(clients, monitors, workspace) {
+    if (clients.length === 0) return false
+    var monitor = null
+    for (var m = 0; m < monitors.length; m++) {
+      if (monitors[m].id === clients[0].monitor) monitor = monitors[m]
+    }
+    if (!monitor) return false
+    // Window positions are in logical pixels, monitor sizes in physical ones.
+    var rotated = monitor.transform % 2 === 1
+    var scale = monitor.scale || 1
+    var monitorWidth = (rotated ? monitor.height : monitor.width) / scale
+    var monitorHeight = (rotated ? monitor.width : monitor.height) / scale
+    var factor = Math.min(root.previewMaxSize / monitorWidth, root.previewMaxSize / monitorHeight)
+
+    var toplevels = {}
+    var values = workspace.toplevels.values
+    for (var t = 0; t < values.length; t++) toplevels[String(values[t].address).replace(/^0x/, "")] = values[t]
+
+    // Tiled below floating below fullscreen; within those, most recently focused on top.
+    function layer(client) { return client.fullscreen ? 2 : (client.floating ? 1 : 0) }
+    clients.sort(function(a, b) { return layer(a) - layer(b) || b.focusHistoryID - a.focusHistoryID })
+
+    var windows = []
+    for (var i = 0; i < clients.length; i++) {
+      var client = clients[i]
+      var toplevel = toplevels[client.a]
+      if (!toplevel || !client.at || !client.size) continue
+      windows.push({
+        toplevel: toplevel,
+        x: Math.round((client.at[0] - monitor.x) * factor),
+        y: Math.round((client.at[1] - monitor.y) * factor),
+        width: Math.max(1, Math.round(client.size[0] * factor)),
+        height: Math.max(1, Math.round(client.size[1] * factor))
+      })
+    }
+    if (windows.length === 0) return false
+    root.previewSize = Qt.size(Math.round(monitorWidth * factor), Math.round(monitorHeight * factor))
+    root.previewWindows = windows
+    return true
+  }
+
+  Process {
+    id: previewProbe
+    property int workspaceId: -1
+    stdout: StdioCollector {
+      onStreamFinished: {
+        if (root.previewHoverId === -1) return
+        if (previewProbe.workspaceId !== root.previewHoverId) {
+          Qt.callLater(root.probePreview)
+          return
+        }
+        var lines = this.text.split("\n")
+        var clients = []
+        var monitors = []
+        try {
+          clients = JSON.parse(lines[0])
+          monitors = JSON.parse(lines[1])
+        } catch (e) {}
+        var workspace = root.workspaceById(previewProbe.workspaceId)
+        if (!root.canPreview() || !workspace || !root.layoutPreview(clients, monitors, workspace)) {
+          root.previewOpen = false
+          return
+        }
+        root.previewAnchor = root.previewHoverButton
+        root.previewOpen = true
+        previewCard.anchor.updateAnchor()
+      }
+    }
+  }
+
+  // The preview is passive like a tooltip: it must not take the bar's popout
+  // slot, which would close whatever panel is open, so the card gets a bar
+  // that only tells it where the bar sits.
+  QtObject {
+    id: previewBar
+    readonly property string position: root.bar ? root.bar.position : "top"
+    readonly property var activePopout: null
+    function requestPopout(owner) {}
+    function releasePopout(owner) {}
+  }
+
+  PopupCard {
+    id: previewCard
+    anchorItem: root.previewAnchor || layout
+    bar: previewBar
+    triggerMode: "hover"
+    open: root.previewOpen
+    contentWidth: root.previewSize.width + previewCard.padding * 2 + Border.left(previewCard.borderSpec) + Border.right(previewCard.borderSpec)
+    contentHeight: root.previewSize.height + previewCard.verticalContentInset
+    // Drop the captures once the card has faded out.
+    onVisibleChanged: if (!visible) root.previewWindows = []
+
+    Item {
+      anchors.centerIn: parent
+      width: root.previewSize.width
+      height: root.previewSize.height
+
+      Repeater {
+        model: root.previewWindows
+
+        Rectangle {
+          id: previewWindow
+          required property var modelData
+          x: modelData.x
+          y: modelData.y
+          width: modelData.width
+          height: modelData.height
+          radius: Style.cornerRadius > 0 ? Math.max(2, Style.space(4)) : 0
+          color: Qt.rgba(Color.popups.text.r, Color.popups.text.g, Color.popups.text.b, 0.08)
+          border.width: 1
+          border.color: Qt.rgba(Color.popups.text.r, Color.popups.text.g, Color.popups.text.b, 0.3)
+
+          ScreencopyView {
+            id: capture
+            anchors.fill: parent
+            anchors.margins: previewWindow.border.width
+            captureSource: previewWindow.modelData.toplevel.wayland
+            live: false
+          }
+
+          Row {
+            anchors.centerIn: parent
+            visible: !capture.hasContent
+
+            Repeater {
+              model: [{ source: root.iconFor(root.windowInfo(previewWindow.modelData.toplevel)), colored: true }]
+              delegate: appIcon
+            }
+          }
+        }
+      }
+    }
+  }
+
   // ---- Settings popup.
 
   // Keyboard cursor over the popup rows: toggles first, then the choices.
@@ -771,9 +997,42 @@ Panel {
   readonly property color panelForeground: bar ? bar.foreground : Color.foreground
   readonly property string panelFont: bar ? bar.fontFamily : Style.font.family
 
-  function setIconOpacity(value) {
-    root.iconOpacityPreview = -1
-    root.setSetting("iconOpacity", Math.round(Math.max(0.2, Math.min(1, value)) * 100) / 100)
+  function sliderRow(key) {
+    for (var i = 0; i < root.toggles.length; i++) {
+      if (root.toggles[i].key === key) return root.toggles[i]
+    }
+    return null
+  }
+
+  function sliderValue(key) {
+    if (key === "iconOpacity") return root.iconOpacity
+    if (key === "workspaceCount") return root.workspaceCount
+    return 0
+  }
+
+  function shownSliderValue(key) {
+    return key in root.sliderPreview ? root.sliderPreview[key] : root.sliderValue(key)
+  }
+
+  function sliderText(row, value) {
+    return row.percent ? Math.round(value * 100) + "%" : String(Math.round(value))
+  }
+
+  function previewSlider(key, value) {
+    var next = {}
+    for (var k in root.sliderPreview) next[k] = root.sliderPreview[k]
+    next[key] = value
+    root.sliderPreview = next
+  }
+
+  // Saves a slider value clamped to its range and snapped to its step.
+  function setSlider(key, value) {
+    var row = root.sliderRow(key)
+    var snapped = row.min + Math.round((Math.max(row.min, Math.min(row.max, value)) - row.min) / row.step) * row.step
+    var next = {}
+    for (var k in root.sliderPreview) if (k !== key) next[k] = root.sliderPreview[k]
+    root.sliderPreview = next
+    root.setSetting(key, Math.round(snapped * 100) / 100)
   }
 
   // Rows that change with left/right: choices (including toggle-list rows
@@ -786,7 +1045,8 @@ Panel {
   function activateRow(row, direction) {
     if (row < 0) return
     if (row < root.toggles.length && root.toggles[row].slider) {
-      if (direction !== 0) root.setIconOpacity(root.iconOpacity + direction * 0.05)
+      var slider = root.toggles[row]
+      if (direction !== 0) root.setSlider(slider.key, root.sliderValue(slider.key) + direction * slider.step)
       return
     }
     if (row < root.toggles.length && !root.toggles[row].options) {
@@ -805,6 +1065,7 @@ Panel {
   }
 
   onOpenedChanged: if (opened) {
+    closePreview()
     cursorIndex = -1
     shellConfigFile.reload()
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
@@ -958,20 +1219,23 @@ Panel {
                 }
 
                 PanelSlider {
-                  id: opacitySlider
+                  id: rowSlider
                   bar: root.bar
                   anchors.left: sliderLabel.right
                   anchors.leftMargin: Style.space(16)
                   anchors.right: sliderValue.left
                   anchors.rightMargin: Style.space(12)
                   anchors.verticalCenter: parent.verticalCenter
-                  minimum: 0.2
-                  maximum: 1
-                  step: 0.05
-                  value: root.iconOpacity
+                  minimum: toggleRow.isSlider ? toggleRow.modelData.min : 0
+                  maximum: toggleRow.isSlider ? toggleRow.modelData.max : 1
+                  step: toggleRow.isSlider ? toggleRow.modelData.step : 0.1
+                  value: toggleRow.isSlider ? root.sliderValue(toggleRow.modelData.key) : 0
+                  // Whole-number sliders snap to, and show a notch for, every value.
+                  integer: toggleRow.isSlider && toggleRow.modelData.step === 1
+                  tickCount: integer ? toggleRow.modelData.max - toggleRow.modelData.min + 1 : 0
                   opacity: root.cursorIndex === toggleRow.index || dragging ? 1 : 0.85
-                  onMoved: function(v) { root.iconOpacityPreview = v }
-                  onReleased: function(v) { root.setIconOpacity(v) }
+                  onMoved: function(v) { root.previewSlider(toggleRow.modelData.key, v) }
+                  onReleased: function(v) { root.setSlider(toggleRow.modelData.key, v) }
                 }
 
                 Text {
@@ -981,7 +1245,7 @@ Panel {
                   width: Style.space(44)
                   horizontalAlignment: Text.AlignRight
                   textFormat: Text.PlainText
-                  text: Math.round(root.shownIconOpacity * 100) + "%"
+                  text: toggleRow.isSlider ? root.sliderText(toggleRow.modelData, root.shownSliderValue(toggleRow.modelData.key)) : ""
                   color: root.panelForeground
                   font.family: root.panelFont
                   font.pixelSize: Style.font.body
