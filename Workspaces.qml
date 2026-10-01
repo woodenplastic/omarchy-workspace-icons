@@ -570,13 +570,32 @@ Panel {
     return ids.map(String).concat(named, special)
   }
 
-  // Replaced only when the keys change: a new array makes the Repeater
-  // rebuild every button, and each rebuild re-registers the bar's click
-  // targets, which bursts of window events turn into real load.
+  // Replaced only when the keys change.
   readonly property var computedKeys: computeWorkspaceKeys()
   property var workspaceList: []
   onComputedKeysChanged: {
     if (JSON.stringify(computedKeys) !== JSON.stringify(workspaceList)) workspaceList = computedKeys
+  }
+
+  // The buttons' model, edited in place: a workspace that comes or goes adds
+  // or removes its one button, and the others stay. Rebuilding every button
+  // re-registers each one's click target with the bar, and the bar resyncs
+  // every plugin on each, which held the whole shell for up to a second on
+  // every switch to a new workspace.
+  ListModel { id: buttonModel }
+  onWorkspaceListChanged: syncButtonModel()
+
+  function syncButtonModel() {
+    var keys = root.workspaceList
+    for (var i = 0; i < keys.length; i++) {
+      var at = -1
+      for (var j = i; j < buttonModel.count; j++) {
+        if (buttonModel.get(j).key === keys[i]) { at = j; break }
+      }
+      if (at === -1) buttonModel.insert(i, { key: keys[i] })
+      else if (at !== i) buttonModel.move(at, i, 1)
+    }
+    if (buttonModel.count > keys.length) buttonModel.remove(keys.length, buttonModel.count - keys.length)
   }
 
   function workspaceName(key) {
@@ -1398,12 +1417,11 @@ Panel {
 
     Repeater {
       id: buttonRepeater
-      model: root.workspaceList
+      model: buttonModel
 
+      // `key` is filled from the model's role.
       WorkspaceButton {
-        required property string modelData
         panel: root
-        key: modelData
       }
     }
   }
