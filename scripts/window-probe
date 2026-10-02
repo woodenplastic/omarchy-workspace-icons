@@ -1,0 +1,161 @@
+#!/usr/bin/python3
+"""The widget's window probe, kept running: each line on stdin asks for one
+probe, answered with the same lines the shell probe in Workspaces.qml prints,
+then "E". It reads Hyprland's socket and /proc itself, so a probe starts no
+processes; the shell probe started about twenty (hyprctl, jq, cat, pgrep, ...)
+each time, every two seconds while a terminal is open. Exits when the widget
+closes its stdin.
+
+  C <json>          the windows, as the widget wants them
+  M <json>          the monitors
+  P pid name exe    for a window's pid, the program in the foreground of the
+                    tty its first child runs on: in a terminal, what runs there
+  R 0|1             whether a screen recorder runs
+  W <stamp>         inode and mtime of the wallpaper, to notice a new one
+"""
+
+import glob
+import json
+import os
+import socket
+import sys
+
+RECORDERS = {"wf-recorder", "gpu-screen-reco", "wl-screenrec", "obs", "kooha"}
+WALLPAPER = os.path.expanduser("~/.local/state/omarchy/current/background")
+MAX_JSON = 1048576
+MAX_PIDS = 256
+
+
+def socket_path():
+    sig = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE", "")
+    runtime = os.environ.get("XDG_RUNTIME_DIR") or "/run/user/%d" % os.getuid()
+    for base in (os.path.join(runtime, "hypr"), "/tmp/hypr"):
+        path = os.path.join(base, sig, ".socket.sock")
+        if sig and os.path.exists(path):
+            return path
+    return None
+
+
+def hypr(request):
+    """Hyprland's JSON answer to `request` (as `hyprctl -j` gives it), or None."""
+    path = socket_path()
+    if not path:
+        return None
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+            s.settimeout(3)
+            s.connect(path)
+            s.sendall(("j/" + request).encode())
+            chunks = []
+            while True:
+                chunk = s.recv(65536)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+        return json.loads(b"".join(chunks))
+    except (OSError, ValueError):
+        return None
+
+
+def compact(value):
+    return json.dumps(value, separators=(",", ":"), ensure_ascii=False)
+
+
+def read(path):
+    try:
+        with open(path, "rb") as f:
+            return f.read().decode(errors="replace")
+    except OSError:
+        return ""
+
+
+def foreground(pid):
+    """(name, exe) of the foreground program on the tty of pid's first child."""
+    children = []
+    for task in sorted(glob.glob("/proc/%s/task/*/children" % pid)):
+        children += read(task).split()
+    if not children:
+        return None
+    stat = read("/proc/%s/stat" % children[0])
+    fields = stat[stat.rfind(") ") + 2:].split() if ") " in stat else []
+    # state ppid pgrp session tty_nr tpgid: the tty's foreground group.
+    tpgid = int(fields[5]) if len(fields) > 5 and fields[5].lstrip("-").isdigit() else 0
+    if tpgid <= 0:
+        return None
+    name = read("/proc/%d/comm" % tpgid).strip().replace(" ", "_")
+    try:
+        exe = os.readlink("/proc/%d/exe" % tpgid)
+    except OSError:
+        exe = ""
+    return name, exe
+
+
+def recorder_running():
+    for comm in glob.glob("/proc/[0-9]*/comm"):
+        if read(comm).strip() in RECORDERS:
+            return True
+    return False
+
+
+def probe(out):
+    clients = hypr("clients")
+    if not isinstance(clients, list):
+        return
+    windows = compact([{
+        "a": str(c.get("address", "")).removeprefix("0x"),
+        "class": c.get("class"),
+        "initialClass": c.get("initialClass"),
+        "initialTitle": c.get("initialTitle"),
+        "pid": c.get("pid"),
+        "at": c.get("at"),
+        "size": c.get("size"),
+        "ws": (c.get("workspace") or {}).get("id"),
+        "wsName": (c.get("workspace") or {}).get("name"),
+        "monitor": c.get("monitor"),
+        "floating": c.get("floating"),
+        "fullscreen": c.get("fullscreen"),
+        "focusHistoryID": c.get("focusHistoryID"),
+        "hidden": c.get("hidden"),
+        "mapped": c.get("mapped"),
+        "pinned": c.get("pinned"),
+    } for c in clients if isinstance(c, dict)])
+    if len(windows.encode()) <= MAX_JSON:
+        out.append("C " + windows)
+
+    monitors = hypr("monitors")
+    if isinstance(monitors, list):
+        keys = ("id", "name", "x", "y", "width", "height", "scale", "transform", "reserved")
+        out.append("M " + compact([{k: m.get(k) for k in keys} for m in monitors if isinstance(m, dict)]))
+
+    pids = sorted({str(c.get("pid")) for c in clients if isinstance(c, dict) and isinstance(c.get("pid"), int)})
+    for pid in pids[:MAX_PIDS]:
+        found = foreground(pid)
+        if found:
+            out.append("P %s %s %s" % (pid, found[0], found[1]))
+
+    out.append("R %d" % (1 if recorder_running() else 0))
+
+    try:
+        st = os.stat(WALLPAPER)
+        out.append("W %d-%d" % (st.st_ino, int(st.st_mtime)))
+    except OSError:
+        out.append("W ")
+
+
+def main():
+    for _ in sys.stdin:
+        out = []
+        try:
+            probe(out)
+        except Exception:  # a bad probe must not end the helper
+            pass
+        out.append("E")
+        sys.stdout.write("\n".join(out) + "\n")
+        sys.stdout.flush()
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (KeyboardInterrupt, BrokenPipeError):
+        pass

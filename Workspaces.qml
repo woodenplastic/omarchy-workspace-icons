@@ -1135,27 +1135,98 @@ Panel {
 
   function refreshWindows() {
     if (root.symbolMode) return
-    if (windowProbe.running) {
+    if (probeHelper.asked || windowProbe.running) {
       root.refreshPending = true
       return
     }
-    windowProbe.command = ["bash", "-c", root.probeScript]
-    windowProbe.running = true
+    if (probeHelper.ready) {
+      probeHelper.asked = true
+      probeHelper.lines = []
+      probeHelper.write("probe\n")
+    } else if (probeHelper.failed) {
+      windowProbe.command = ["bash", "-c", root.probeScript]
+      windowProbe.running = true
+    } else {
+      // Still starting: asked as soon as it's up.
+      root.refreshPending = true
+      return
+    }
     probeWatchdog.restart()
   }
 
-  // A hung hyprctl must not stall every later refresh.
+  // A hung hyprctl or helper must not stall every later refresh.
   Timer {
     id: probeWatchdog
     interval: 4000
-    onTriggered: if (windowProbe.running) windowProbe.running = false
+    onTriggered: {
+      if (windowProbe.running) windowProbe.running = false
+      if (probeHelper.asked) probeHelper.running = false
+    }
   }
 
-  // Prints the window list ("C <json>"), the monitors ("M <json>"), for each
-  // window pid the program in the foreground of the tty its first child runs
-  // on ("P pid name exe") — for a terminal window that is the program running
-  // in the terminal — whether a screen recorder runs ("R 0|1"), and a stamp
-  // of the wallpaper file ("W <stamp>").
+  // scripts/window-probe, kept running and asked a line at a time: it reads
+  // Hyprland's socket and /proc itself and answers with the lines of the
+  // shell probe below, then "E". A refresh then starts no processes; the
+  // shell probe started about twenty (some 60 ms of CPU on a small machine),
+  // every two seconds while a terminal is open. It ends when its stdin does.
+  Process {
+    id: probeHelper
+    // Up and answering; asked: a probe is out; failed: it couldn't be kept
+    // running, and the shell probe does the work.
+    property bool ready: false
+    property bool asked: false
+    property bool failed: false
+    property bool answered: false
+    property int failures: 0
+    property var lines: []
+
+    running: !root.symbolMode && !failed
+    stdinEnabled: true
+    command: ["/usr/bin/python3", Qt.resolvedUrl("scripts/window-probe").toString().replace(/^file:\/\//, "")]
+    onStarted: {
+      ready = true
+      answered = false
+      if (root.refreshPending) {
+        root.refreshPending = false
+        root.scheduleRefresh(false)
+      }
+    }
+    onExited: {
+      ready = false
+      asked = false
+      probeWatchdog.stop()
+      if (root.symbolMode) return
+      // Three runs in a row that never answered a probe: give up on it.
+      failures = answered ? 0 : failures + 1
+      if (failures >= 3) failed = true
+      else probeHelperRestart.restart()
+      root.scheduleRefresh(false)
+    }
+    stdout: SplitParser {
+      onRead: function(line) {
+        if (line !== "E") {
+          probeHelper.lines.push(line)
+          return
+        }
+        probeHelper.asked = false
+        probeHelper.answered = true
+        root.takeProbe(probeHelper.lines)
+        probeHelper.lines = []
+      }
+    }
+  }
+
+  Timer {
+    id: probeHelperRestart
+    interval: 2000
+    onTriggered: if (!root.symbolMode && !probeHelper.failed) probeHelper.running = true
+  }
+
+  // The fallback without the helper. Prints the window list ("C <json>"), the
+  // monitors ("M <json>"), for each window pid the program in the foreground
+  // of the tty its first child runs on ("P pid name exe") — for a terminal
+  // window that is the program running in the terminal — whether a screen
+  // recorder runs ("R 0|1"), and a stamp of the wallpaper file ("W <stamp>").
   readonly property string probeScript: 'clients=$(hyprctl clients -j 2>/dev/null) || exit 0\n'
     + 'printf "C %s\\n" "$(jq -c \'map({a: (.address | ltrimstr("0x")), class, initialClass, initialTitle, pid, at, size,'
     + ' ws: .workspace.id, wsName: .workspace.name, monitor, floating, fullscreen, focusHistoryID, hidden, mapped, pinned})\' <<<"$clients" | head -c 1048576)"\n'
@@ -1174,47 +1245,49 @@ Panel {
   Process {
     id: windowProbe
     stdout: StdioCollector {
-      onStreamFinished: {
-        probeWatchdog.stop()
-        var clients = null
-        var monitors = null
-        var programs = ({})
-        var lines = this.text.split("\n")
-        for (var i = 0; i < lines.length; i++) {
-          var line = lines[i]
-          if (line.indexOf("C ") === 0) {
-            var list = null
-            try { list = JSON.parse(line.substring(2)) } catch (e) {}
-            if (Array.isArray(list)) {
-              clients = ({})
-              for (var j = 0; j < list.length; j++) {
-                if (list[j] && list[j].a) clients[String(list[j].a)] = list[j]
-              }
-            }
-          } else if (line.indexOf("M ") === 0) {
-            try { monitors = JSON.parse(line.substring(2)) } catch (e) {}
-          } else if (line.indexOf("P ") === 0) {
-            var parts = line.substring(2).split(" ")
-            programs[parts[0]] = { name: parts[1] || "", exe: parts.slice(2).join(" ") }
-          } else if (line.indexOf("R ") === 0) {
-            root.recorderRunning = line.substring(2).trim() === "1"
-          } else if (line.indexOf("W ") === 0) {
-            root.wallpaperStamp = line.substring(2).trim()
+      onStreamFinished: root.takeProbe(this.text.split("\n"))
+    }
+  }
+
+  // A probe's lines, from the helper or the shell probe.
+  function takeProbe(lines) {
+    probeWatchdog.stop()
+    var clients = null
+    var monitors = null
+    var programs = ({})
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i]
+      if (line.indexOf("C ") === 0) {
+        var list = null
+        try { list = JSON.parse(line.substring(2)) } catch (e) {}
+        if (Array.isArray(list)) {
+          clients = ({})
+          for (var j = 0; j < list.length; j++) {
+            if (list[j] && list[j].a) clients[String(list[j].a)] = list[j]
           }
         }
-        // Mid-move, `hyprctl clients` can briefly report no windows; a
-        // failed read keeps the last good data too.
-        var emptyGlitch = clients !== null && Object.keys(clients).length === 0 && Hyprland.toplevels.values.length > 0
-        if (clients !== null && !emptyGlitch && JSON.stringify(clients) !== JSON.stringify(root.clientInfo)) root.clientInfo = clients
-        if (Array.isArray(monitors) && JSON.stringify(monitors) !== JSON.stringify(root.monitorInfo)) root.monitorInfo = monitors
-        if (JSON.stringify(programs) !== JSON.stringify(root.terminalPrograms)) root.terminalPrograms = programs
-        root.updateTerminalFlag()
-        root.resolveMissingIcons()
-        if (root.refreshPending) {
-          root.refreshPending = false
-          root.scheduleRefresh(false)
-        }
+      } else if (line.indexOf("M ") === 0) {
+        try { monitors = JSON.parse(line.substring(2)) } catch (e) {}
+      } else if (line.indexOf("P ") === 0) {
+        var parts = line.substring(2).split(" ")
+        programs[parts[0]] = { name: parts[1] || "", exe: parts.slice(2).join(" ") }
+      } else if (line.indexOf("R ") === 0) {
+        root.recorderRunning = line.substring(2).trim() === "1"
+      } else if (line.indexOf("W ") === 0) {
+        root.wallpaperStamp = line.substring(2).trim()
       }
+    }
+    // Mid-move, `hyprctl clients` can briefly report no windows; a
+    // failed read keeps the last good data too.
+    var emptyGlitch = clients !== null && Object.keys(clients).length === 0 && Hyprland.toplevels.values.length > 0
+    if (clients !== null && !emptyGlitch && JSON.stringify(clients) !== JSON.stringify(root.clientInfo)) root.clientInfo = clients
+    if (Array.isArray(monitors) && JSON.stringify(monitors) !== JSON.stringify(root.monitorInfo)) root.monitorInfo = monitors
+    if (JSON.stringify(programs) !== JSON.stringify(root.terminalPrograms)) root.terminalPrograms = programs
+    root.updateTerminalFlag()
+    root.resolveMissingIcons()
+    if (root.refreshPending) {
+      root.refreshPending = false
+      root.scheduleRefresh(false)
     }
   }
 

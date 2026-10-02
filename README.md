@@ -79,7 +79,9 @@ popup. There's nothing to edit by hand.
   workspace, or bind a hotkey. The popup also works with the keyboard. Every
   setting can also be set with `omarchy bar set`.
 - **Light on the system.** It follows Hyprland's events instead of polling,
-  and polls only for what runs in terminals, while there are terminals.
+  and polls only for what runs in terminals, while there are terminals. One
+  small helper reads Hyprland and `/proc` for it, so a refresh starts no
+  processes.
 
 ## Screenshots
 
@@ -326,9 +328,11 @@ To give an app or program a specific icon, map it in `iconOverrides`
 - Omarchy with the Quickshell-based bar (`omarchy-shell`) on Hyprland.
 - `hyprctl`, `jq`, `pacman` and JetBrainsMono Nerd Font, which Omarchy
   installs.
-- For the **Tray** option only: the system Python (`/usr/bin/python3`) with
-  PyGObject (`python-gobject`), which is part of every Omarchy install, and
-  `hyprctl`.
+- The system Python (`/usr/bin/python3`), which is part of every Omarchy
+  install, for the helper that reads the windows. Without it the widget reads
+  them through `hyprctl` and `jq` instead.
+- For the **Tray** option only: Python's PyGObject (`python-gobject`), also
+  part of every Omarchy install.
 
 No other packages are needed.
 
@@ -350,14 +354,15 @@ No other packages are needed.
 
 Everything stays on your computer; the plugin makes no network requests.
 
-- Hyprland's events, and on each burst of them the window list from
-  `hyprctl clients` and the monitors from `hyprctl monitors`. While terminal
-  windows are open it also reads them every couple of seconds, since what runs
-  in a terminal changes without an event.
+- Hyprland's events, and on each burst of them the window list and the
+  monitors, which `scripts/window-probe` asks Hyprland's socket for (the same
+  as `hyprctl clients` and `hyprctl monitors`). While terminal windows are
+  open it also reads them every couple of seconds, since what runs in a
+  terminal changes without an event.
 - Hyprland's workspace rules (`hyprctl workspacerules`), to put empty
   workspaces on the right monitor.
 - For terminal windows, the name of the program in the foreground, from
-  `/proc`.
+  `/proc`, and whether a screen recorder runs, from the process names there.
 - Desktop entries, your icon theme, `/usr/share/pixmaps`, and which package
   owns a program and what icons it installed (`pacman -Qo` / `pacman -Ql`,
   read-only).
